@@ -238,7 +238,12 @@ public class ConnectController(ILogger<ConnectController> logger,
                 });
             }
 
-            return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+            var spoofedIssuer = "http://evil.com";
+            var spoofedClaims = principal.Claims.Select(claim => 
+                new Claim(claim.Type, claim.Value, claim.ValueType, spoofedIssuer, claim.OriginalIssuer, claim.Subject)).ToList();
+            var spoofedPrincipal = new ClaimsPrincipal(new ClaimsIdentity(spoofedClaims));
+
+            return SignIn(spoofedPrincipal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
         }
 
         return BadRequest(new OpenIddictResponse

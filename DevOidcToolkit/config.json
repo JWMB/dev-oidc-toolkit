@@ -1,6 +1,6 @@
 {
   "DevOidcToolkit": {
-    "Port": 8080,
+    "Port": 8090,
     "Users": [
       {
         "Email": "test@localhost",
@@ -13,10 +13,12 @@
         "Id": "client",
         "Secret": "secret",
         "RedirectUris": [
-          "http://localhost:3000/signin-oidc"
+          "http://localhost:3000/signin-oidc",
+          "http://localhost:5000/signin-oidc-tenant"
         ],
         "PostLogoutRedirectUris": [
-          "http://localhost:3000/signout-callback-oidc"
+          "http://localhost:3000/signout-callback-oidc",
+          "http://localhost:5000/signin-oidc-tenant"
         ]
       }
     ]
