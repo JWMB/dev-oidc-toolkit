@@ -35,6 +35,11 @@ else
 }
 
 <form method="post">
+	<textarea asp-for="JsonInput"></textarea>
+	<input type="submit" asp-page-handler="SubmitJson" value=@(Model.Input == null ? "Create" : "Modify")>
+</form>
+
+<form method="post">
 	@if (!ViewData.ModelState.IsValid)
 	{
 		<div>

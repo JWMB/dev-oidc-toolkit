@@ -11,10 +11,6 @@
 
 <h1>Clients</h1>
 
-@* <EditObject Input=@clients.First()></EditObject> *@
-<DevOidcToolkit.Pages.Shared.Components.MyComponent />
-<MyComponent />
-
 @if (Model.Clients.Any() == true)
 {
     <ul class="client-list">
@@ -38,6 +34,11 @@ else
 {
     <p>No clients found</p>
 }
+
+<form method="post">
+	<textarea asp-for="JsonInput"></textarea>
+	<input type="submit" asp-page-handler="SubmitJson" value=@(Model.Input == null ? "Create" : "Modify")>
+</form>
 
 <form method="post">
 	@if (!ViewData.ModelState.IsValid)
