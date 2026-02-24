@@ -33,6 +33,7 @@ else
 {
     <p>No users found</p>
 }
+
 <form method="post">
 	@if (!ViewData.ModelState.IsValid)
 	{
@@ -41,59 +42,7 @@ else
 		</div>
 	}
 
-	@foreach (var pEx in Model.UserProperties)
-	{
-		object? value = null;
-		if (Model.Input != null)
-		{
-			value = pEx.PropertyInfo.GetValue(Model.Input); //?.ToString();
-		}
-		if (value == null && pEx.IsRequired && pEx.DefaultValue != null)
-		{
-			value = pEx.DefaultValue;
-		}
-		var strValue = value?.ToString();
-		var p = pEx.PropertyInfo;
-		<label for=@p.Name>@(pEx.IsRequired ? "* " : "")@p.Name</label>
-		@if (p.PropertyType == typeof(bool))
-		{
-			// Html.CheckBoxFor(m => (bool?)value == true, new { name = p.Name }); // Templates can be used only with field access,
-			// <input type="checkbox" name=@p.Name checked=@(strValue?.ToLower() == "true" ? "checked" : "") /> *@
-			if ((bool?)value == true)
-			{
-				<input type="checkbox" name=@p.Name checked />
-			}
-			else
-			{
-				<input type="checkbox" name=@p.Name />
-			}
-		}
-		else if (p.PropertyType == typeof(string))
-		{
-			<input type="text" name=@p.Name value=@strValue />
-		}
-		else if (new[] { typeof(long), typeof(ulong), typeof(int), typeof(uint), typeof(short), typeof(ushort), typeof(byte) }.Contains(pEx.Type))
-		{
-			<input type="number" name=@p.Name value=@strValue />
-		}
-		else if (new[] { typeof(DateTimeOffset), typeof(DateTime) }.Contains(pEx.Type))
-		{
-			<input type="date" name=@p.Name value=@strValue />
-		}
-		else
-		{
-			<div>@p.PropertyType.Name @string.Join(", ", p.PropertyType.GenericTypeArguments.Select(o => o.Name))</div>
-		}
+	@Html.Raw(FormGenerator.Render(Model.Input))
 
-		@* switch (p.PropertyType.Name)
-		{
-			default: <input type="text" name=@p.Name />
-		}
-		p.PropertyType switch
-		{
-		_ => <input type= "text" name= @p.Name />
-		}*@
-
- 	}
 	<input type="submit" value=@(Model.Input == null ? "Create" : "Modify")>
 </form>

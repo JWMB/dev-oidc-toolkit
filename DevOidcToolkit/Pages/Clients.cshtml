@@ -1,11 +1,7 @@
 @page "/clients"
-@using OpenIddict.Abstractions
-@using OpenIddict.Core
-@using System.Linq
-@using Microsoft.EntityFrameworkCore
-@using OpenIddict.EntityFrameworkCore.Models
+@model ClientsPageModel
 @using System.Text.Json
-@inject DevOidcToolkitContext DbContext
+@using DevOidcToolkit.Pages.Shared.Components
 @{
     Layout = "_Layout";
     ViewData["Title"] = "clients";
@@ -15,14 +11,14 @@
 
 <h1>Clients</h1>
 
-@{
-    var clients = await DbContext.Set<OpenIddictEntityFrameworkCoreApplication>().ToListAsync();
-}
+@* <EditObject Input=@clients.First()></EditObject> *@
+<DevOidcToolkit.Pages.Shared.Components.MyComponent />
+<MyComponent />
 
-@if (clients?.Any() == true)
+@if (Model.Clients.Any() == true)
 {
     <ul class="client-list">
-        @foreach (var client in clients)
+		@foreach (var client in Model.Clients)
         {
             <li style="list-style: none;">
                 <details>
@@ -30,7 +26,8 @@
                     @{
                         var options = new JsonSerializerOptions { WriteIndented = true };
                         var json = JsonSerializer.Serialize(client, options);
-                    }
+					}
+					<a href="/clients?clientid=@client.ClientId">Edit</a>
                     <pre class="raw-data">@Html.Raw(json)</pre>
                 </details>
             </li>
@@ -41,3 +38,16 @@ else
 {
     <p>No clients found</p>
 }
+
+<form method="post">
+	@if (!ViewData.ModelState.IsValid)
+	{
+		<div>
+			@Html.ValidationSummary()
+		</div>
+	}
+
+	@Html.Raw(FormGenerator.Render(Model.Input))
+
+	<input type="submit" value=@(Model.Input == null ? "Create" : "Modify")>
+</form>
