@@ -76,6 +76,7 @@ namespace DevOidcToolkit.Pages
             }
             else
             {
+                input.Id = Guid.NewGuid().ToString().Replace("-", "");
                 await dbContext.AddAsync(input);
                 Clients.Add(input);
             }
