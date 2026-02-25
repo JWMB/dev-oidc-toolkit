@@ -5,34 +5,6 @@ using Microsoft.AspNetCore.Identity;
 
 namespace DevOidcToolkit
 {
-    //public interface IPropertyInfoAccessor
-    //{
-    //    string Name { get; }
-    //    PropertyInfo PropertyInfo { get; }
-    //    Type Type { get; }
-
-    //    object? DefaultValue { get; }
-    //    bool IsNullable { get; }
-    //    bool IsRequired { get; }
-    //    string? Syntax { get; }
-    //    bool IsSecret { get; }
-    //}
-
-    //public class PropertyInfoAccessor(PropertyInfo p) //: IPropertyInfoAccessor
-    //{
-    //    public string Name => p.Name;
-    //    public PropertyInfo PropertyInfo => p;
-    //    public bool IsRequired => p.CustomAttributes.Where(o =>
-    //                new[] { typeof(PersonalDataAttribute), typeof(System.ComponentModel.DataAnnotations.RequiredAttribute)
-    //                }.Contains(o.AttributeType)).Any();
-    //    public bool IsNullable => Nullable.GetUnderlyingType(p.PropertyType) != null;
-    //    public Type Type => Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
-    //    public object? DefaultValue => p.GetCustomAttribute<DefaultValueAttribute>()?.Value;
-    //    public string? Syntax => p.GetCustomAttribute<System.Diagnostics.CodeAnalysis.StringSyntaxAttribute>()?.Syntax;
-
-    //    public bool IsSecret => false;
-    //}
-
     public class PropertyInfoWrapper
     {
         public required string Name { get; set; }
@@ -68,22 +40,19 @@ namespace DevOidcToolkit
                 Type = System.Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType,
                 DefaultValue = p.GetCustomAttribute<DefaultValueAttribute>()?.Value,
                 Syntax = p.GetCustomAttribute<System.Diagnostics.CodeAnalysis.StringSyntaxAttribute>()?.Syntax,
+
+                Step = null, // TODO: no commonly agreed-on attribute, right?
+                Secret = false, // TODO: no commonly agreed-on attribute, right?
+                ReadOnly = !p.CanWrite, // TODO: also some attribute, no?
+
+                // Validation:
+                Pattern = p.GetCustomAttribute<System.ComponentModel.DataAnnotations.RegularExpressionAttribute>()?.Pattern,
+                MinLength = p.GetCustomAttribute<System.ComponentModel.DataAnnotations.MinLengthAttribute>()?.Length,
+                MaxLength = p.GetCustomAttribute<System.ComponentModel.DataAnnotations.MaxLengthAttribute>()?.Length,
+                // TODO: inclusive or not
+                Min = p.GetCustomAttribute<System.ComponentModel.DataAnnotations.RangeAttribute>()?.Minimum?.ToString(), // TODO: globalization etc
+                Max = p.GetCustomAttribute<System.ComponentModel.DataAnnotations.RangeAttribute>()?.Maximum?.ToString(), // TODO: globalization etc
             };
         }
-
-        //public static PropertyInfoWrapper From(PropertyInfoWrapper source)
-        //{
-        //    return new PropertyInfoWrapper
-        //    {
-        //        Name = source.Name,
-        //        Type = source.Type,
-        //        PropertyInfo = source.PropertyInfo,
-        //        DefaultValue = source.DefaultValue,
-        //        IsNullable = source.IsNullable,
-        //        IsRequired = source.IsRequired,
-        //        IsSecret = source.IsSecret,
-        //        Syntax = source.Syntax,
-        //    };
-        //}
     }
 }
