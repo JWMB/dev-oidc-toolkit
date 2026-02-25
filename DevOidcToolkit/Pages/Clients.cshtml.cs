@@ -90,9 +90,9 @@ namespace DevOidcToolkit.Pages
 
         public List<OpenIddictEntityFrameworkCoreApplication> Clients { get; private set; } = [];
 
-        public List<FormGenerator.RenderOverride> GetRenderOverrides() =>
+        public List<RenderOverride> GetRenderOverrides() =>
             [
-                new FormGenerator.RenderOverride { PropertyName = nameof(OpenIddictEntityFrameworkCoreApplication.ClientSecret), ModifyInfo = pi => pi.Secret = true }
+                new RenderOverride { PropertyName = nameof(OpenIddictEntityFrameworkCoreApplication.ClientSecret), ModifyInfo = pi => pi.Secret = true }
             ];
     }
 }

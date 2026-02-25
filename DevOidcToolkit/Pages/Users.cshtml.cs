@@ -28,11 +28,11 @@ public class UsersPageModel : PageModel
 
     public List<DevOidcToolkitUser> Users { get; set; } = new();
 
-    public List<FormGenerator.RenderOverride> GetRenderOverrides() 
+    public List<RenderOverride> GetRenderOverrides() 
         => [
-            //new FormGenerator.RenderOverride { PropertyName = nameof(DevOidcToolkitUser.FirstName), ModifyInfo = pi => pi.MinLength = 1 },
-            new FormGenerator.RenderOverride { PropertyName = nameof(DevOidcToolkitUser.NormalizedEmail), ModifyInfo = pi => pi.ReadOnly = true },
-            new FormGenerator.RenderOverride { PropertyName = nameof(DevOidcToolkitUser.NormalizedUserName), ModifyInfo = pi => pi.ReadOnly = true }
+            //new RenderOverride { PropertyName = nameof(DevOidcToolkitUser.FirstName), ModifyInfo = pi => pi.MinLength = 1 },
+            new RenderOverride { PropertyName = nameof(DevOidcToolkitUser.NormalizedEmail), ModifyInfo = pi => pi.ReadOnly = true },
+            new RenderOverride { PropertyName = nameof(DevOidcToolkitUser.NormalizedUserName), ModifyInfo = pi => pi.ReadOnly = true }
         ];
     public async Task<IActionResult> OnGetAsync()
     {
