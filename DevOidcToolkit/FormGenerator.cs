@@ -1,8 +1,4 @@
-﻿using System.ComponentModel;
-using System.Reflection;
-
-using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Mvc.ModelBinding;
+﻿using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace DevOidcToolkit
 {
@@ -88,7 +84,7 @@ namespace DevOidcToolkit
         {
             if (renderOverride?.Renderer != null)
                 return renderOverride.Renderer(p, value);
-            return new HtmlElementRendererBase(p).Render(value);
+            return HtmlElementRendererBase.ResolveRenderer(p, value).Render(value);
         }
 
         public static string Render<T>(T? model = default, IEnumerable<RenderOverride>? overrides = null)
@@ -117,6 +113,7 @@ namespace DevOidcToolkit
         public required string PropertyName { get; set; }
         public Func<PropertyInfoWrapper, object?, string>? Renderer { get; set; }
         public Action<PropertyInfoWrapper>? ModifyInfo { get; set; }
+        public Action<Dictionary<string, string?>>? ModifyAttributes { get; set; } // TODO: HTML-specific, should be in a separate implementation
     }
 
     public interface IElementRenderer
@@ -124,7 +121,48 @@ namespace DevOidcToolkit
         string Render(object? value);
     }
 
-    public class HtmlElementRendererBase : IElementRenderer
+    public class HtmlUnhandledRenderer(PropertyInfoWrapper p) : HtmlElementRendererBase(p)
+    {
+        public override string Render(object? value) =>
+            $"""<div>{p.PropertyInfo.PropertyType.Name} {string.Join(", ", p.PropertyInfo.PropertyType.GenericTypeArguments.Select(o => o.Name))}</div> """;
+    }
+
+    public class HtmlInputStringRenderer(PropertyInfoWrapper p) : HtmlElementRendererBase(p)
+    {
+        public override string Render(object? value)
+        {
+            if (p.Syntax == "Json") // TODO: maybe also if MaxLength is large enough?
+                return RenderElement("textarea", [], value?.ToString());
+            else
+                return RenderElement("input",
+                    GetTuplesAsDict([("type", p.Secret ? "password" : "text"), ("value", value?.ToString())]));
+            // return RenderWithX("input", [("type", p.Secret ? "password" : "text"), ("value", value?.ToString())]);
+        }
+    }
+
+    public class HtmlInputNumberRenderer(PropertyInfoWrapper p) : HtmlElementRendererBase(p)
+    {
+        public override string Render(object? value) =>
+            RenderElement("input",
+                GetTuplesAsDict([("type", "number"), ("value", value?.ToString())]));
+        //[("type", "number"), ("value", value?.ToString())]);
+    }
+    public class HtmlInputDateRenderer(PropertyInfoWrapper p) : HtmlElementRendererBase(p)
+    {
+        public override string Render(object? value) =>
+            RenderElement("input",
+                GetTuplesAsDict([("type", "date"), ("value", value?.ToString())]));
+        // RenderWithX("input", [("type", "date"), ("value", value?.ToString())]);
+    }
+    public class HtmlInputBoolRenderer(PropertyInfoWrapper p) : HtmlElementRendererBase(p)
+    {
+        public override string Render(object? value) =>
+            RenderElement("input",
+                GetTuplesAsDict([("type", "checkbox"), ("checked", (bool?)value == true ? emptyAttr : null)]));
+        // RenderWithX("input", [("type", "checkbox"), ("checked", (bool?)value == true ? emptyAttr : null)]);
+    }
+
+    public abstract class HtmlElementRendererBase : IElementRenderer
     {
         private readonly PropertyInfoWrapper p;
 
@@ -133,7 +171,7 @@ namespace DevOidcToolkit
             this.p = p;
         }
 
-        private readonly string emptyAttr = "_EMPTY_ATTR_";
+        protected const string emptyAttr = "_EMPTY_ATTR_";
 
         protected Dictionary<string, string?> GetAttributes()
         {
@@ -152,42 +190,35 @@ namespace DevOidcToolkit
             .ToDictionary();
         }
 
-        protected string RenderElement(string elementName, IEnumerable<KeyValuePair<string, string?>> attrs, string? innerHtml)
+        protected string RenderAttributes(IEnumerable<KeyValuePair<string, string?>> attrs)
+            => string.Join(" ", attrs.Select(o => o.Value == emptyAttr ? o.Key : $"{o.Key}=\"{o.Value}\""));
+        protected IEnumerable<KeyValuePair<string, string?>> GetTuplesAsDict(IEnumerable<(string, string?)> items)
+            => items.Select(o => KeyValuePair.Create(o.Item1, o.Item2));
+
+        protected string RenderElement(string elementName, IEnumerable<KeyValuePair<string, string?>> attrs, string? innerHtml = null, bool addAutoAttributes = true)
         {
-            var attrsStr = string.Join(" ", attrs.Select(o => o.Value == emptyAttr ? o.Key : $"{o.Key}=\"{o.Value}\""));
+            var attrsStr = RenderAttributes(addAutoAttributes
+                ? GetAttributes().Concat(attrs)
+                : attrs);
             return innerHtml == null
                 ? $"""<{elementName} {attrsStr}/>"""
                 : $"""<{elementName} {attrsStr}>{innerHtml}</{elementName}>""";
         }
 
-        public string Render(object? value)
+        public abstract string Render(object? value);
+
+        public static IElementRenderer ResolveRenderer(PropertyInfoWrapper p, object? value)
         {
-            var strValue = value?.ToString();
-            var element = "input";
-            string? innerHtml = null;
-            var attrs = new List<(string, string?)>();
-
             if (p.Type == typeof(bool))
-                attrs = [("type", "checkbox"), ("checked", (bool?)value == true ? emptyAttr : null)];
+                return new HtmlInputBoolRenderer(p);
             else if (p.Type == typeof(string))
-            {
-                if (p.Syntax == "Json")
-                {
-                    element = "textarea";
-                    innerHtml = strValue;
-                }
-                else
-                    attrs = [("type", p.Secret ? "password" : "text"), ("value", strValue)];
-            }
+                return new HtmlInputStringRenderer(p);
             else if (new[] { typeof(long), typeof(ulong), typeof(int), typeof(uint), typeof(short), typeof(ushort), typeof(byte) }.Contains(p.Type))
-                attrs = [("type", "number"), ("value", strValue)];
+                return new HtmlInputNumberRenderer(p);
             else if (new[] { typeof(DateTimeOffset), typeof(DateTime) }.Contains(p.Type))
-                attrs = [("type", "date"), ("value", strValue)];
+                return new HtmlInputDateRenderer(p);
             else
-                return $"""<div>{p.PropertyInfo.PropertyType.Name} {string.Join(", ", p.PropertyInfo.PropertyType.GenericTypeArguments.Select(o => o.Name))}</div> """;
-
-            var mergedAttributes = GetAttributes().Concat(attrs.Select(o => KeyValuePair.Create(o.Item1, o.Item2))).ToDictionary(o => o.Key, o => o.Value);
-            return RenderElement(element, mergedAttributes, innerHtml);
+                return new HtmlUnhandledRenderer(p);
         }
     }
 }
