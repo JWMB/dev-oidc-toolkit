@@ -8,23 +8,10 @@ namespace DevOidcToolkit
 {
     public class FormGenerator
     {
-        public class PropertyInfoAccessor(PropertyInfo p)
-        {
-            public string Name => p.Name;
-            public PropertyInfo PropertyInfo => p;
-            public bool IsRequired => p.CustomAttributes.Where(o =>
-                        new[] { typeof(PersonalDataAttribute), typeof(System.ComponentModel.DataAnnotations.RequiredAttribute)
-                        }.Contains(o.AttributeType)).Any();
-            public bool IsNullable => Nullable.GetUnderlyingType(p.PropertyType) != null;
-            public Type Type => Nullable.GetUnderlyingType(p.PropertyType) ?? p.PropertyType;
-            public object? DefaultValue => p.GetCustomAttribute<DefaultValueAttribute>()?.Value;
-            public string? Syntax => p.GetCustomAttribute<System.Diagnostics.CodeAnalysis.StringSyntaxAttribute>()?.Syntax;
-        }
-
         public static void UpdateModel<T>(T from, T to)
         {
             // TODO: how can we update the existing without manually setting all properties?
-            foreach (var p in FormGenerator.AnalyzeProperties<T>())
+            foreach (var p in AnalyzeProperties<T>())
             {
                 var prev = p.PropertyInfo.GetValue(to);
                 var next = p.PropertyInfo.GetValue(from);
@@ -41,18 +28,26 @@ namespace DevOidcToolkit
             }
         }
 
-        public static List<PropertyInfoAccessor> AnalyzeProperties<T>()
+        public static List<PropertyInfoWrapper> AnalyzeProperties<T>(IEnumerable<KeyValuePair<string, Action<PropertyInfoWrapper>>>? overrides = null)
         {
             return typeof(T).GetProperties()
                 .Where(p => p.CanRead && p.CanWrite)
                 .Select((p, i) => new
                 {
                     OriginalIndex = i,
-                    PEx = new PropertyInfoAccessor(p),
+                    PEx = PropertyInfoWrapper.From(p),
                 })
-                .OrderByDescending(o => o.PEx.IsRequired)
+                .Select(o =>
+                {
+                    var px = o.PEx;
+                    var found = overrides?.SingleOrDefault(p => p.Key == o.PEx.Name);
+                    if (found.HasValue && found.Value.Value != null)
+                        found.Value.Value(o.PEx);
+                    return new { o.OriginalIndex, o.PEx };
+                })
+                .OrderByDescending(o => o.PEx.Required)
                 .ThenBy(o => o.OriginalIndex)
-                .Select(o => o.PEx).ToList();
+                .Select(o => o.PEx).Cast<PropertyInfoWrapper>().ToList();
         }
 
         public static bool IsModelValidSuperStrange<T>(ModelStateDictionary modelState, T model)
@@ -61,7 +56,7 @@ namespace DevOidcToolkit
                 return true;
 
             // TODO: this can't be right, all this because checkboxes yield "on" instead of booleans?
-            var invalids = modelState.Where(o => o.Value != null && o.Value.ValidationState != Microsoft.AspNetCore.Mvc.ModelBinding.ModelValidationState.Valid).ToList();
+            var invalids = modelState.Where(o => o.Value != null && o.Value.ValidationState != ModelValidationState.Valid).ToList();
 
             foreach (var item in invalids)
             {
@@ -89,46 +84,75 @@ namespace DevOidcToolkit
             return invalids.Any(o => o.Value == null || o.Value.Errors.Any()) == false; // !ModelState.IsValid
         }
 
-        public static string Render<T>(T? model = default)
+        public class RenderOverride
+        {
+            public required string PropertyName { get; set; }
+            public Func<PropertyInfoWrapper, object?, string>? Renderer { get; set; }
+            public Action<PropertyInfoWrapper>? ModifyInfo { get; set; }
+        }
+
+        public static string Render(object? value, PropertyInfoWrapper p, RenderOverride? renderOverride = null)
+        {
+            if (renderOverride?.Renderer != null)
+                return renderOverride.Renderer(p, value);
+
+            var strValue = value?.ToString();
+
+            if (p.Type == typeof(bool))
+                return $"""<input type="checkbox" {AddAttributes()} {((bool?)value == true ? "checked" : "")} />""";
+            else if (p.Type == typeof(string))
+            {
+                if (p.Syntax == "Json")
+                    return $"""<textarea {AddAttributes()}>{strValue}</textarea>""";
+                else
+                    return $"""<input type="{(p.Secret ? "password" : "text")}" {AddAttributes()} value="{strValue}" />""";
+            }
+            else if (new[] { typeof(long), typeof(ulong), typeof(int), typeof(uint), typeof(short), typeof(ushort), typeof(byte) }.Contains(p.Type))
+                return $"""<input type="number" {AddAttributes()} value="{strValue}" /> """;
+            else if (new[] { typeof(DateTimeOffset), typeof(DateTime) }.Contains(p.Type))
+                return $"""<input type="date" {AddAttributes()} value="{strValue}" /> """;
+            else
+                return $"""<div>{p.PropertyInfo.PropertyType.Name} {string.Join(", ", p.PropertyInfo.PropertyType.GenericTypeArguments.Select(o => o.Name))}</div> """;
+
+            string AddAttributes()
+            {
+                var emptyAttr = "_EMPTY_ATTR_";
+                var strs = new Dictionary<string, string?>
+                {
+                    ["name"] = p.Name,
+                    ["required"] = p.Required ? emptyAttr : null,
+                    ["readonly"] = p.ReadOnly ? emptyAttr : null,
+                    ["min"] = p.Min,
+                    ["max"] = p.Max,
+                    ["minlength"] = p.MinLength.HasValue ? $"{p.MinLength}" : null,
+                    ["maxlength"] = p.MaxLength.HasValue ? $"{p.MaxLength}" : null,
+                    ["pattern"] = p.Pattern,
+                    ["step"] = p.Step
+                }.Where(o => o.Value != null)
+                .Select(o => o.Value == emptyAttr ? o.Key : $"{o.Key}=\"{o.Value}\"");
+                return string.Join(" ", strs);
+                //return $"""name="{p.Name} {p.ReadOnly ?}""";
+            }
+        }
+
+        public static string Render<T>(T? model = default, IEnumerable<RenderOverride>? overrides = null)
         {
             var strs = new List<string>();
-            //var sb = new StringBuilder();
-            foreach (var p in AnalyzeProperties<T>())
+            var props = AnalyzeProperties<T>(overrides?.Where(o => o.ModifyInfo != null).Select(o => KeyValuePair.Create(o.PropertyName, o.ModifyInfo!)));
+            foreach (var p in props)
             {
                 object? value = null;
                 if (model != null)
                     value = p.PropertyInfo.GetValue(model); //?.ToString();
-                if (value == null && p.IsRequired && p.DefaultValue != null)
+                if (value == null && p.Required && p.DefaultValue != null)
                     value = p.DefaultValue;
 
-                var isSecret = p.Name.ToLower().Contains("secret"); // hm, expected an attribute on these properties...
-
-                var strValue = value?.ToString();
-                strs.Add($"""<label for="{p.Name}">{(p.IsRequired ? "* " : "")}{p.Name}</label>""");
-
-                if (p.Type == typeof(bool))
-                    strs.Add($"""<input type="checkbox" name="{p.Name}" {((bool?)value == true ? "checked" : "")} />""");
-                else if (p.Type == typeof(string))
-                {
-                    if (p.Syntax == "Json")
-                        strs.Add($"""<textarea name="{p.Name}">{strValue}</textarea>""");
-                    else
-                        strs.Add($"""<input type="{(isSecret ? "password" : "text")}" name="{p.Name}" value="{strValue}" />""");
-                }
-                else if (new[] { typeof(long), typeof(ulong), typeof(int), typeof(uint), typeof(short), typeof(ushort), typeof(byte) }.Contains(p.Type))
-                    strs.Add($"""<input type="number" name="{p.Name}" value="{strValue}" />""");
-                else if (new[] { typeof(DateTimeOffset), typeof(DateTime) }.Contains(p.Type))
-                    strs.Add($"""<input type="date" name="{p.Name}" value="{strValue}" />""");
-                else
-                    strs.Add($"""<div>{p.PropertyInfo.PropertyType.Name} {string.Join(", ", p.PropertyInfo.PropertyType.GenericTypeArguments.Select(o => o.Name))}</div>""");
+                strs.Add($"""<label for="{p.Name}">{(p.Required ? "* " : "")}{p.Name}</label> """);
+                strs.Add(Render(value, p, overrides?.SingleOrDefault(o => o.PropertyName == p.Name)));
             }
 
-            //p.PropertyType switch
-            //{
-            //_ => <input type= "text" name= @p.Name />
-            //}
-
             return string.Join("\n", strs);
+
         }
     }
 }

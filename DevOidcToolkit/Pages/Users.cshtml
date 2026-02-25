@@ -47,7 +47,7 @@ else
 		</div>
 	}
 
-	@Html.Raw(FormGenerator.Render(Model.Input))
+	@Html.Raw(FormGenerator.Render(Model.Input, Model.GetRenderOverrides()))
 
 	<input type="submit" value=@(Model.Input == null ? "Create" : "Modify")>
 </form>

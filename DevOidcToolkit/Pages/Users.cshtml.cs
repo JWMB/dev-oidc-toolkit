@@ -28,6 +28,12 @@ public class UsersPageModel : PageModel
 
     public List<DevOidcToolkitUser> Users { get; set; } = new();
 
+    public List<FormGenerator.RenderOverride> GetRenderOverrides() 
+        => [
+            //new FormGenerator.RenderOverride { PropertyName = nameof(DevOidcToolkitUser.FirstName), ModifyInfo = pi => pi.MinLength = 1 },
+            new FormGenerator.RenderOverride { PropertyName = nameof(DevOidcToolkitUser.NormalizedEmail), ModifyInfo = pi => pi.ReadOnly = true },
+            new FormGenerator.RenderOverride { PropertyName = nameof(DevOidcToolkitUser.NormalizedUserName), ModifyInfo = pi => pi.ReadOnly = true }
+        ];
     public async Task<IActionResult> OnGetAsync()
     {
         Users = await userManager.Users.ToListAsync();

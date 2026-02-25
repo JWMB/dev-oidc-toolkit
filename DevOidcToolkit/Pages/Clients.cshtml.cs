@@ -89,5 +89,10 @@ namespace DevOidcToolkit.Pages
         public required string? JsonInput { get; set; }
 
         public List<OpenIddictEntityFrameworkCoreApplication> Clients { get; private set; } = [];
+
+        public List<FormGenerator.RenderOverride> GetRenderOverrides() =>
+            [
+                new FormGenerator.RenderOverride { PropertyName = nameof(OpenIddictEntityFrameworkCoreApplication.ClientSecret), ModifyInfo = pi => pi.Secret = true }
+            ];
     }
 }
