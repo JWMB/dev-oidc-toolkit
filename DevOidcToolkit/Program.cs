@@ -17,8 +17,11 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration.Sources.Clear();
 
-builder.Configuration.AddJsonFile("config.json", optional: false, reloadOnChange: true);
-builder.Configuration.AddEnvironmentVariables();
+builder.Configuration
+    .AddJsonFile("config.json", optional: false, reloadOnChange: true)
+    .AddJsonFile($"config.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
+    .AddUserSecrets<Program>()
+    .AddEnvironmentVariables();
 
 var configSection = builder.Configuration.GetSection(DevOidcToolkitConfiguration.Position);
 var config = configSection.Get<DevOidcToolkitConfiguration>() ?? new DevOidcToolkitConfiguration();
@@ -195,7 +198,14 @@ using (var scope = app.Services.CreateScope())
 
     if (config.Database.SqliteFile is not null)
     {
-        db.Database.EnsureCreated();
+        try
+        {
+            db.Database.EnsureCreated();
+        }
+        catch (SqliteException ex) when (ex.Message.Contains("SQLite Error 14")) // unable to open database file
+        {
+            throw new Exception($"{nameof(config.Database.SqliteFile)}={config.Database.SqliteFile} ({new FileInfo(config.Database.SqliteFile).FullName})", ex);
+        }
     }
 
     // Set up users and clients in the DB

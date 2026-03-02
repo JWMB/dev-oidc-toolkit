@@ -7,7 +7,7 @@
 
     public abstract class HtmlElementRendererBase : IElementRenderer
     {
-        private readonly PropertyInfoWrapper p;
+        protected readonly PropertyInfoWrapper p;
 
         public HtmlElementRendererBase(PropertyInfoWrapper p)
         {
@@ -87,7 +87,7 @@
     {
         public override string Render(object? value) =>
             RenderElement("input",
-                GetTuplesAsDict([("type", "number"), ("value", value?.ToString())]));
+                GetTuplesAsDict([("type", "number"), ("value", value?.ToString() ?? (p.Nullable ? null : p.DefaultValue?.ToString() ?? "0"))]));
     }
     public class HtmlInputDateRenderer(PropertyInfoWrapper p) : HtmlElementRendererBase(p)
     {

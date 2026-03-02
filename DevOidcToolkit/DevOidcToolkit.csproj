@@ -6,12 +6,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <DebugType>embedded</DebugType>
     <AssemblyName>dev-oidc-toolkit</AssemblyName>
-    <PublishSingleFile>true</PublishSingleFile>
+    <!--<PublishSingleFile>true</PublishSingleFile>-->
     <!--<SelfContained>true</SelfContained>-->
-    <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
+    <!--<GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>-->
     <InvariantGlobalization>true</InvariantGlobalization>
     <AssemblyVersion Condition=" '$(VERSION)' == '' ">0.0.0.0</AssemblyVersion>
     <AssemblyVersion Condition=" '$(VERSION)' != '' ">$(VERSION)</AssemblyVersion>
+    <UserSecretsId>f10d3b5c-92ae-4c60-9511-fbb1359f4d24</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

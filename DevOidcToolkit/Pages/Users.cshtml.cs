@@ -7,6 +7,7 @@ using DevOidcToolkit.Infrastructure.Database;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,13 +31,17 @@ public class UsersPageModel : PageModel
 
     public List<RenderOverride> GetRenderOverrides() 
         => [
-            //new RenderOverride { PropertyName = nameof(DevOidcToolkitUser.FirstName), ModifyInfo = pi => pi.MinLength = 1 },
+            new RenderOverride { PropertyName = nameof(DevOidcToolkitUser.UserName), ModifyInfo = pi => {
+                pi.Required = true;
+                pi.Pattern = @"\w+"; // probably min/max length?
+            } },
             new RenderOverride { PropertyName = nameof(DevOidcToolkitUser.Email), ModifyInfo = pi => pi.Required = true },
             new RenderOverride { PropertyName = nameof(DevOidcToolkitUser.NormalizedEmail), ModifyInfo = pi => pi.ReadOnly = true },
             new RenderOverride { PropertyName = nameof(DevOidcToolkitUser.NormalizedUserName), ModifyInfo = pi => pi.ReadOnly = true }
         ];
     public async Task<IActionResult> OnGetAsync()
     {
+        new System.Text.RegularExpressions.Regex("");
         Users = await userManager.Users.ToListAsync();
 
         var qEmail = Request.Query["email"].FirstOrDefault();
@@ -74,27 +79,52 @@ public class UsersPageModel : PageModel
     {
         if (!FormGenerator.IsModelValidSuperStrange(ModelState, Input)) { }
         else if (Input == null) { }
+        else if (await IsModelValidActualValidationSincePropertiesAreNotProperlyDecorated(ModelState, Input)) { }
         else
             await Upsert(Input);
 
         return Page();
     }
 
+    private async Task<bool> IsModelValidActualValidationSincePropertiesAreNotProperlyDecorated(ModelStateDictionary modelState, DevOidcToolkitUser input)
+    {
+        var validationTasks = userManager.UserValidators.Select(o => o.ValidateAsync(userManager, input));
+        var validationResults = await Task.WhenAll(validationTasks);
+        var errors = validationResults.Where(o => o.Succeeded == false).SelectMany(o => o.Errors).ToList();
+        if (errors.Any())
+        {
+            foreach (var error in errors)
+                modelState.AddModelError(error.Code, error.Description);
+            return false;
+        }
+        return true;
+    }
+
     private async Task Upsert(DevOidcToolkitUser input)
     {
+        input.NormalizedEmail = input.Email?.ToUpperInvariant();
+        input.NormalizedUserName = input.UserName?.ToUpperInvariant();
+
         Users = await userManager.Users.ToListAsync();
         var existing = Users.FirstOrDefault(o => string.Equals(o.Email, input.Email, StringComparison.OrdinalIgnoreCase));
 
         if (existing != null)
         {
             FormGenerator.UpdateModel(input, existing);
-            await userManager.UpdateAsync(existing);
+            var result = await userManager.UpdateAsync(existing);
+            if (!result.Succeeded)
+                throw new Exception($"{RenderErrors(result)}");  // TODO: update modelState (e.g. username already exists)
         }
         else
         {
             input.Id = Guid.NewGuid().ToString().Replace("-", "");
-            await userManager.CreateAsync(input);
+            var result = await userManager.CreateAsync(input);
+            if (!result.Succeeded)
+                throw new Exception($"{RenderErrors(result)}"); // TODO: update modelState (e.g. username already exists)
             Users.Add(input);
+            var tmp = await userManager.FindByEmailAsync(input.Email!);
         }
+
+        static string RenderErrors(IdentityResult r) => $"{string.Join(", ", r.Errors.Select(o => $"{o.Code}: {o.Description}"))}";
     }
 }

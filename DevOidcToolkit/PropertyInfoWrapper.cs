@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
 using Microsoft.AspNetCore.Identity;
@@ -18,6 +19,7 @@ namespace DevOidcToolkit
         public bool ReadOnly { get; set; }
         public string? Syntax { get; set; }
 
+        [StringSyntax(StringSyntaxAttribute.Regex)]
         public string? Pattern { get; set; }
         public string? Min { get; set; }
         public string? Max { get; set; }
