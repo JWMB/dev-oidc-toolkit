@@ -8,6 +8,8 @@
 
 <h1>Log In</h1>
 
+@if (Model.IsDevelopment)
+{
 <form id="login" method="post">
     @if (!ViewData.ModelState.IsValid)
     {
@@ -16,23 +18,11 @@
         </div>
     }
 
-	@if (Model.IsDevelopment)
-	{
-		<label for="email">Select User</label>
-		<select asp-for="Input.Email" asp-items="Model.UserEmails" id="email">
-			<option value="">-- Select User Email --</option>
-		</select>
-		<span asp-validation-for="Input.Email"></span>
-	}
-	else
-	{
-		<label for="email">Email</label>
-		<input asp-for="Input.Email" asp-items="Model.UserEmails" id="email">
-		<span asp-validation-for="Input.Email"></span>
-
-		<label for="password">Password</label>
-		<input asp-for="Input.Password" id="password" type="password" />
-	}
+	<label for="email">Select User</label>
+	<select asp-for="Input.Email" asp-items="Model.UserEmails" id="email">
+		<option value="">-- Select User Email --</option>
+	</select>
+	<span asp-validation-for="Input.Email"></span>
 
 	<label for="remember-me">
 		<input asp-for="Input.RememberMe" type="checkbox" id="remember-me" />
@@ -41,3 +31,17 @@
 
 	<button type="submit">Log In</button>
 </form>
+}
+else
+{
+<form id="loginWithPassword" method="post">
+
+	<label for="email">Email or username</label>
+	<input asp-for="Input.EmailOrUsername" id="email">
+
+	<label for="password">Password</label>
+	<input asp-for="Input.Password" id="password" type="password" />
+		
+	<button type="submit" asp-page-handler="Password">Log In</button>
+</form>
+}

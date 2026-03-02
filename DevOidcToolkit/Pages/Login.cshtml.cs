@@ -31,6 +31,7 @@ public class LoginPageModel(SignInManager<DevOidcToolkitUser> signInManager, Use
         [Display(Name = "Remember me?")]
         public required bool RememberMe { get; set; }
 
+        public string EmailOrUsername { get; set; } = "";
         public string? Password { get; set; }
     }
 
@@ -56,39 +57,36 @@ public class LoginPageModel(SignInManager<DevOidcToolkitUser> signInManager, Use
             : [];
     }
 
-    public async Task<IActionResult> OnPostAsync(string? returnUrl = null)
+    public async Task<IActionResult> OnPostPasswordAsync(string? returnUrl = null)
     {
-        returnUrl ??= Url.Content("/user");
-
-        if (ModelState.IsValid)
+        var user = await _userManager.FindByEmailAsync(Input.EmailOrUsername) ?? await _userManager.FindByNameAsync(Input.EmailOrUsername);
+        if (user != null && Input.Password?.Any() == true)
         {
-            var user = await _userManager.FindByEmailAsync(Input.Email);
-            if (user == null)
-            {
-                ModelState.AddModelError(string.Empty, "Invalid login attempt");
-                return Page();
-            }
-
-            if (IsDevelopment)
-            {
-                await _signInManager.SignInAsync(user, Input.RememberMe);
-            }
-            else
-            {
-                if (Input.Password?.Any() != true)
-                {
-                    ModelState.AddModelError(string.Empty, "Invalid login attempt");
-                    return Page();
-                }
-                await _signInManager.PasswordSignInAsync(user, Input.Password, Input.RememberMe, user.AccessFailedCount > 3);
-            }
-
-            return LocalRedirect(returnUrl);
+            await _signInManager.PasswordSignInAsync(user, Input.Password, Input.RememberMe, user.AccessFailedCount > 3);
+            return LocalRedirect(returnUrl ?? Url.Content("/user"));
         }
 
+        // If we got this far, something failed, redisplay form
+        ModelState.AddModelError(string.Empty, "Invalid login attempt");
         PopulateEmails();
+        return Page();
+    }
+
+    public async Task<IActionResult> OnPostAsync(string? returnUrl = null)
+    {
+        if (ModelState.IsValid && IsDevelopment)
+        {
+            var user = await _userManager.FindByEmailAsync(Input.Email);
+            if (user != null)
+            {
+                await _signInManager.SignInAsync(user, Input.RememberMe);
+                return LocalRedirect(returnUrl ?? Url.Content("/user"));
+            }
+        }
 
         // If we got this far, something failed, redisplay form
+        ModelState.AddModelError(string.Empty, "Invalid login attempt");
+        PopulateEmails();
         return Page();
     }
 }

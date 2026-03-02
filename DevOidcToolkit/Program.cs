@@ -224,7 +224,7 @@ using (var scope = app.Services.CreateScope())
         {
             Id = i.ToString(),
             Email = user.Email,
-            UserName = user.Email,
+            UserName = user.Username ?? user.Email,
             FirstName = user.FirstName,
             LastName = user.LastName,
             EmailConfirmed = true,
