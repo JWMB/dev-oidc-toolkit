@@ -77,9 +77,9 @@ public class UsersPageModel : PageModel
 
     public async Task<IActionResult> OnPost()
     {
-        if (!FormGenerator.IsModelValidSuperStrange(ModelState, Input)) { }
+        if (false == FormGenerator.IsModelValidSuperStrange(ModelState, Input)) { }
         else if (Input == null) { }
-        else if (await IsModelValidActualValidationSincePropertiesAreNotProperlyDecorated(ModelState, Input)) { }
+        else if (false == await IsModelValidActualValidationSincePropertiesAreNotProperlyDecorated(ModelState, Input)) { }
         else
             await Upsert(Input);
 
@@ -102,11 +102,19 @@ public class UsersPageModel : PageModel
 
     private async Task Upsert(DevOidcToolkitUser input)
     {
+        input.Email = input.Email?.Trim();
         input.NormalizedEmail = input.Email?.ToUpperInvariant();
+
+        input.UserName = input.UserName?.Trim();
         input.NormalizedUserName = input.UserName?.ToUpperInvariant();
 
-        Users = await userManager.Users.ToListAsync();
-        var existing = Users.FirstOrDefault(o => string.Equals(o.Email, input.Email, StringComparison.OrdinalIgnoreCase));
+        input.Id = input.Id.Trim();
+
+        var existing = input.Id.Any() && input.Id != "0"
+            ? await userManager.FindByIdAsync(input.Id)
+            : (input.Email?.Any() == true 
+                ? await userManager.FindByEmailAsync(input.Email)
+                : null);
 
         if (existing != null)
         {
@@ -121,9 +129,9 @@ public class UsersPageModel : PageModel
             var result = await userManager.CreateAsync(input);
             if (!result.Succeeded)
                 throw new Exception($"{RenderErrors(result)}"); // TODO: update modelState (e.g. username already exists)
-            Users.Add(input);
-            var tmp = await userManager.FindByEmailAsync(input.Email!);
         }
+
+        Users = await userManager.Users.ToListAsync();
 
         static string RenderErrors(IdentityResult r) => $"{string.Join(", ", r.Errors.Select(o => $"{o.Code}: {o.Description}"))}";
     }
