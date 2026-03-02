@@ -10,7 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 
-//[Authorize]
+[Authorize]
 public class UsersPageModel : PageModel
 {
     private readonly UserManager<DevOidcToolkitUser> userManager;
@@ -31,6 +31,7 @@ public class UsersPageModel : PageModel
     public List<RenderOverride> GetRenderOverrides() 
         => [
             //new RenderOverride { PropertyName = nameof(DevOidcToolkitUser.FirstName), ModifyInfo = pi => pi.MinLength = 1 },
+            new RenderOverride { PropertyName = nameof(DevOidcToolkitUser.Email), ModifyInfo = pi => pi.Required = true },
             new RenderOverride { PropertyName = nameof(DevOidcToolkitUser.NormalizedEmail), ModifyInfo = pi => pi.ReadOnly = true },
             new RenderOverride { PropertyName = nameof(DevOidcToolkitUser.NormalizedUserName), ModifyInfo = pi => pi.ReadOnly = true }
         ];

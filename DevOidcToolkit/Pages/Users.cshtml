@@ -43,6 +43,7 @@ else
 	@if (!ViewData.ModelState.IsValid)
 	{
 		<div>
+			@Html.Raw(FormGenerator.RenderValidationErrors(ViewData.ModelState))
 			@Html.ValidationSummary()
 		</div>
 	}

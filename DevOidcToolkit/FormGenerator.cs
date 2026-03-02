@@ -80,6 +80,15 @@ namespace DevOidcToolkit
             return invalids.Any(o => o.Value == null || o.Value.Errors.Any()) == false; // !ModelState.IsValid
         }
 
+        public static string RenderValidationErrors(ModelStateDictionary modelState)
+        {
+            return string.Join("\n", modelState
+                .Where(o => o.Value != null && o.Value.ValidationState == ModelValidationState.Invalid)
+                .Where(o => o.Value != null && o.Value.Errors.Any())
+                .Select(o => $"<div>{o.Key}: {string.Join(", ", o.Value!.Errors.Select(e => e.ErrorMessage))}</div>")
+            );
+        }
+
         public static string Render(object? value, PropertyInfoWrapper p, RenderOverride? renderOverride = null)
         {
             if (renderOverride?.Renderer != null)
