@@ -35,7 +35,7 @@ public class LoginPageModel(SignInManager<DevOidcToolkitUser> signInManager, Use
         public string? Password { get; set; }
     }
 
-    public bool IsDevelopment => false; // Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development";
+    public bool IsDevelopment => Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development";
 
     public void OnGet()
     {
