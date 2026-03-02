@@ -5,6 +5,7 @@ using DevOidcToolkit.Infrastructure.Configuration;
 using DevOidcToolkit.Infrastructure.Database;
 
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 
@@ -30,7 +31,18 @@ builder.Logging.SetMinimumLevel(LogEventLevelMapping.LogLevelType(config.Logging
 
 builder.Services.AddDbContext<DevOidcToolkitContext>(options =>
 {
-    options.UseInMemoryDatabase("dev-auth");
+    if (config.Database.SqliteFile is not null)
+    {
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = config.Database.SqliteFile
+        }.ToString();
+        options.UseSqlite(connectionString);
+    }
+    else
+    {
+        options.UseInMemoryDatabase("dev-auth");
+    }
     options.UseOpenIddict();
 });
 
@@ -82,7 +94,7 @@ builder.Services.AddOpenIddict()
         options.AllowClientCredentialsFlow();
 
         options.RegisterScopes(Scopes.OpenId, Scopes.Email, Scopes.Profile);
-        options.RegisterClaims(Claims.Email, Claims.GivenName, Claims.FamilyName);
+        options.RegisterClaims(Claims.Email, Claims.GivenName, Claims.FamilyName, Claims.Role);
 
         if (config.Issuer is not null)
         {
@@ -157,6 +169,23 @@ builder.WebHost.ConfigureKestrel(options =>
     });
 });
 
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        var origins = config.Clients
+            .SelectMany(client => client.RedirectUris.Concat(client.PostLogoutRedirectUris))
+            .Select(uri => new Uri(uri).GetLeftPart(UriPartial.Authority))
+            .Distinct()
+            .ToArray();
+
+        policy.WithOrigins(origins)
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -164,12 +193,24 @@ using (var scope = app.Services.CreateScope())
     var services = scope.ServiceProvider;
     var db = services.GetRequiredService<DevOidcToolkitContext>();
 
+    if (config.Database.SqliteFile is not null)
+    {
+        db.Database.EnsureCreated();
+    }
+
     // Set up users and clients in the DB
     var userManager = services.GetRequiredService<UserManager<DevOidcToolkitUser>>();
+    var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
     for (var i = 0; i < config.Users.Count; i++)
     {
         var user = config.Users[i];
-        var result = await userManager.CreateAsync(new DevOidcToolkitUser()
+
+        if (await userManager.FindByEmailAsync(user.Email) is not null)
+        {
+            continue;
+        }
+
+        var userEntity = new DevOidcToolkitUser()
         {
             Id = i.ToString(),
             Email = user.Email,
@@ -177,11 +218,21 @@ using (var scope = app.Services.CreateScope())
             FirstName = user.FirstName,
             LastName = user.LastName,
             EmailConfirmed = true,
-        });
+        };
+        var result = await userManager.CreateAsync(userEntity);
 
         if (!result.Succeeded)
         {
             throw new Exception($"Failed to set up user: ${string.Join(", ", result.Errors.Select(error => error.Description))}");
+        }
+
+        foreach (var role in user.Roles)
+        {
+            if (!await roleManager.RoleExistsAsync(role))
+            {
+                await roleManager.CreateAsync(new IdentityRole(role));
+            }
+            await userManager.AddToRoleAsync(userEntity, role);
         }
     }
 
@@ -189,6 +240,11 @@ using (var scope = app.Services.CreateScope())
     var openIddictManager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
     foreach (var client in config.Clients)
     {
+        if (await openIddictManager.FindByClientIdAsync(client.Id) is not null)
+        {
+            continue;
+        }
+
         var clientApp = new OpenIddictApplicationDescriptor()
         {
             ClientId = client.Id,

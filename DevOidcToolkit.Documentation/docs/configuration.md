@@ -1,7 +1,8 @@
 # Configuration
 
 Dev OIDC Toolkit can be configured in two ways, either through environment variables, or through a JSON configuration
-file.
+file. Additionally, users and clients can be created and managed at runtime through the web interface - see
+[Runtime Management](runtime-management.md) for details.
 
 ## Environment variable configuration
 
@@ -59,6 +60,12 @@ This is a list of all of the environment variables that can be used to configure
             <td>None (derived from request URL)</td>
         </tr>
         <tr>
+            <td>DevOidcToolkit__Database__SqliteFile</td>
+            <td>The path to the SQLite database file. When set, data is persisted to this file and survives restarts. When not set, an in-memory database is used and all data is lost on restart.</td>
+            <td>/data/dev-oidc-toolkit.db</td>
+            <td>None (in-memory)</td>
+        </tr>
+        <tr>
             <td>DevOidcToolkit__Logging__MinimumLevel</td>
             <td>The minimum log level, possible values are Trace, Debug, Information, Warning, Error, Critical.</td>
             <td>Information</td>
@@ -71,25 +78,25 @@ This is a list of all of the environment variables that can be used to configure
             <td>false</td>
         </tr>
         <tr>
-            <td>DevOidcToolkit__Https_File_CertificatePath</td>
+            <td>DevOidcToolkit__Https__File__CertificatePath</td>
             <td>The path to the certificate file.</td>
             <td>/app/cert.pem</td>
             <td>None</td>
         </tr>
         <tr>
-            <td>DevOidcToolkit__Https_File_PrivateKeyPath</td>
+            <td>DevOidcToolkit__Https__File__PrivateKeyPath</td>
             <td>The path to the private key file.</td>
             <td>/app/key.pem</td>
             <td>None</td>
         </tr>
         <tr>
-            <td>DevOidcToolkit__Https_Inline_Certificate</td>
+            <td>DevOidcToolkit__Https__Inline__Certificate</td>
             <td>The certificate as a string.</td>
             <td>Raw PEM certificate</td>
             <td>None</td>
         </tr>
         <tr>
-            <td>DevOidcToolkit__Https_Inline_PrivateKey</td>
+            <td>DevOidcToolkit__Https__Inline__PrivateKey</td>
             <td>The private key as a string.</td>
             <td>Raw PEM private key</td>
             <td>None</td>
@@ -110,6 +117,12 @@ This is a list of all of the environment variables that can be used to configure
             <td>DevOidcToolkit__Users__INDEX__LastName</td>
             <td>The last name of the user.</td>
             <td>Doe</td>
+            <td>None</td>
+        </tr>
+        <tr>
+            <td>DevOidcToolkit__Users__INDEX__Roles__INDEX</td>
+            <td>The roles of the user</td>
+            <td>user</td>
             <td>None</td>
         </tr>
         <tr>
@@ -196,6 +209,13 @@ details](#example-json-configuration)).
             <td>Override the issuer URL embedded in tokens and the OIDC discovery document. Useful for testing clients that validate the <code>iss</code> claim. When not set, the issuer is derived from the incoming request URL.</td>
             <td>https://fake-issuer.example.com</td>
             <td>None</td>
+        </tr>
+        <tr>
+            <td>Database</td>
+            <td>object</td>
+            <td>The database configuration, see <a href="#database">Database</a> for more information.</td>
+            <td>See <a href="#database">Database</a> for more information.</td>
+            <td>None (in-memory)</td>
         </tr>
         <tr>
             <td>Https</td>
@@ -345,6 +365,38 @@ details](#example-json-configuration)).
     </tbody>
 </table>
 
+#### Database
+
+The database configuration controls how data is stored. By default, an in-memory database is used and all data
+(including users and clients created at runtime) is lost when the application stops. Set `SqliteFile` to a file path to
+use a SQLite database instead, which persists data between restarts.
+
+!!! note "Limitations"
+    The SQLite database schema is created automatically on first run using `EnsureCreated`. There are no migrations
+    supported — if the schema changes in a future version of dev-oidc-toolkit you may need to delete and recreate the
+    database file.
+
+<table>
+    <thead>
+        <tr>
+            <th>Property</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Example</th>
+            <th>Default Value</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>SqliteFile</td>
+            <td>string</td>
+            <td>Path to the SQLite database file. When set, all data is persisted to this file. When omitted, an in-memory database is used and data is lost on restart.</td>
+            <td>/data/dev-oidc-toolkit.db</td>
+            <td>None (in-memory)</td>
+        </tr>
+    </tbody>
+</table>
+
 #### Users
 
 <table>
@@ -428,11 +480,42 @@ details](#example-json-configuration)).
 
 ### Example JSON configuration
 
+In-memory database (default, no persistence):
+
 ```json
 {
     "DevOidcToolkit": {
         "Port": 8080,
         "Issuer": "https://fake-issuer.example.com",
+        "Users": [
+            {
+                "Email": "sudo@localhost",
+                "FirstName": "Test",
+                "LastName": "User"
+            }
+        ],
+        "Clients": [
+            {
+                "Id": "test",
+                "Secret": "ThisIsNotARealSecret",
+                "RedirectUris": [
+                    "http://localhost:3000/callback"
+                ]
+            }
+        ]
+    }
+}
+```
+
+SQLite database (data persists across restarts):
+
+```json
+{
+    "DevOidcToolkit": {
+        "Port": 8080,
+        "Database": {
+            "SqliteFile": "/data/dev-oidc-toolkit.db"
+        },
         "Users": [
             {
                 "Email": "sudo@localhost",
