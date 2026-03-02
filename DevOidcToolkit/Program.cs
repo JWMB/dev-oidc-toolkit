@@ -16,7 +16,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration.Sources.Clear();
 
-builder.Configuration.AddJsonFile("config.json", optional: true, reloadOnChange: true);
+builder.Configuration.AddJsonFile("config.json", optional: false, reloadOnChange: true);
 builder.Configuration.AddEnvironmentVariables();
 
 var configSection = builder.Configuration.GetSection(DevOidcToolkitConfiguration.Position);
@@ -105,6 +105,8 @@ builder.Services.AddOpenIddict()
 
 builder.Services.AddControllersWithViews().AddRazorRuntimeCompilation();
 builder.Services.AddRazorPages().AddRazorRuntimeCompilation();
+
+Console.WriteLine($"Setting up Kestrel: {config.Address} {config.Port}");
 
 builder.WebHost.ConfigureKestrel(options =>
 {
@@ -224,22 +226,27 @@ app.UseAuthorization();
 
 if (!app.Environment.IsDevelopment())
 {
-
-    var documentationFileProvider = new ManifestEmbeddedFileProvider(typeof(Program).Assembly, "/Documentation");
-    app.Map("/documentation", documentationApp =>
+    try
     {
-        documentationApp.UseDefaultFiles(new DefaultFilesOptions
+        var documentationFileProvider = new ManifestEmbeddedFileProvider(typeof(Program).Assembly, "/Documentation");
+        app.Map("/documentation", documentationApp =>
         {
-            FileProvider = documentationFileProvider,
-            DefaultFileNames = ["index.html"],
-        });
+            documentationApp.UseDefaultFiles(new DefaultFilesOptions
+            {
+                FileProvider = documentationFileProvider,
+                DefaultFileNames = ["index.html"],
+            });
 
-        documentationApp.UseStaticFiles(new StaticFileOptions
-        {
-            FileProvider = documentationFileProvider,
+            documentationApp.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = documentationFileProvider,
+            });
         });
-    });
-
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Documentation error: {ex.Message}");
+    }
 }
 
 app.MapControllers();
