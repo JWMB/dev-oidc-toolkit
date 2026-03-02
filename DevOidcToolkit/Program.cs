@@ -229,6 +229,9 @@ using (var scope = app.Services.CreateScope())
             LastName = user.LastName,
             EmailConfirmed = true,
         };
+        if (user.Password?.Any() == true)
+            userEntity.PasswordHash = userManager.PasswordHasher.HashPassword(userEntity, user.Password);
+
         var result = await userManager.CreateAsync(userEntity);
 
         if (!result.Succeeded)

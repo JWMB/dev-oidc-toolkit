@@ -30,7 +30,11 @@ public class LoginPageModel(SignInManager<DevOidcToolkitUser> signInManager, Use
 
         [Display(Name = "Remember me?")]
         public required bool RememberMe { get; set; }
+
+        public string? Password { get; set; }
     }
+
+    public bool IsDevelopment => false; // Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development";
 
     public void OnGet()
     {
@@ -38,15 +42,18 @@ public class LoginPageModel(SignInManager<DevOidcToolkitUser> signInManager, Use
         {
             ModelState.AddModelError(string.Empty, ErrorMessage);
         }
+        PopulateEmails();
+    }
 
-        var users = _userManager.Users.ToList();
-
-        UserEmails = [.. users.Select(u =>
+    private void PopulateEmails()
+    {
+        UserEmails = IsDevelopment ? [.. _userManager.Users.ToList().Select(u =>
             new SelectListItem
             {
                 Value = u.Email,
                 Text = u.Email
-            })];
+            })]
+            : [];
     }
 
     public async Task<IActionResult> OnPostAsync(string? returnUrl = null)
@@ -62,18 +69,24 @@ public class LoginPageModel(SignInManager<DevOidcToolkitUser> signInManager, Use
                 return Page();
             }
 
-            await _signInManager.SignInAsync(user, Input.RememberMe);
+            if (IsDevelopment)
+            {
+                await _signInManager.SignInAsync(user, Input.RememberMe);
+            }
+            else
+            {
+                if (Input.Password?.Any() != true)
+                {
+                    ModelState.AddModelError(string.Empty, "Invalid login attempt");
+                    return Page();
+                }
+                await _signInManager.PasswordSignInAsync(user, Input.Password, Input.RememberMe, user.AccessFailedCount > 3);
+            }
+
             return LocalRedirect(returnUrl);
         }
 
-        var users = _userManager.Users.ToList();
-
-        UserEmails = [.. users.Select(u =>
-            new SelectListItem
-            {
-                Value = u.Email,
-                Text = u.Email
-            })];
+        PopulateEmails();
 
         // If we got this far, something failed, redisplay form
         return Page();

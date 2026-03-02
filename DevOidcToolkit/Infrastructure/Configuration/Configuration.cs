@@ -26,6 +26,7 @@ public class UserConfiguration
     [Required] public required string Email { get; set; }
     [Required] public required string FirstName { get; set; }
     [Required] public required string LastName { get; set; }
+    public string? Password { get; set; }
     public List<string> Roles { get; set; } = [];
 }
 
