@@ -44,7 +44,7 @@
                 ? GetAttributes().Concat(attrs)
                 : attrs);
             return innerHtml == null
-                ? $"""<{elementName} {attrsStr}/>"""
+                ? $"""<{elementName} {attrsStr} />"""
                 : $"""<{elementName} {attrsStr}>{innerHtml}</{elementName}>""";
         }
 
@@ -76,7 +76,7 @@
         public override string Render(object? value)
         {
             if (p.Syntax == "Json") // TODO: maybe also if MaxLength is large enough?
-                return RenderElement("textarea", [], value?.ToString());
+                return RenderElement("textarea", [], value?.ToString() ?? "");
             else
                 return RenderElement("input",
                     GetTuplesAsDict([("type", p.Secret ? "password" : "text"), ("value", value?.ToString())]));
