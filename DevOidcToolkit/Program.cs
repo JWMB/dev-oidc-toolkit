@@ -5,6 +5,7 @@ using DevOidcToolkit.Infrastructure.Configuration;
 using DevOidcToolkit.Infrastructure.Database;
 
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
@@ -109,13 +110,15 @@ builder.Services.AddOpenIddict()
                .AddEphemeralSigningKey();
 
         // Register the ASP.NET Core host and configure the ASP.NET Core options.
-        options.UseAspNetCore()
+        var oidBuilder = options.UseAspNetCore()
                .EnableAuthorizationEndpointPassthrough()
                .EnableTokenEndpointPassthrough()
                .EnableUserInfoEndpointPassthrough()
                .EnableStatusCodePagesIntegration()
-               .EnableEndSessionEndpointPassthrough()
-               .DisableTransportSecurityRequirement();
+               .EnableEndSessionEndpointPassthrough();
+
+        if (builder.Environment.EnvironmentName == "Development")
+            oidBuilder.DisableTransportSecurityRequirement();
     });
 
 builder.Services.AddControllersWithViews().AddRazorRuntimeCompilation();
@@ -125,52 +128,38 @@ Console.WriteLine($"Setting up Kestrel: {config.Address} {config.Port}");
 
 builder.WebHost.ConfigureKestrel(options =>
 {
+    bool fallbackToDefault = false; // builder.Environment.EnvironmentName != "Development";
     if (config.Address != null)
+        options.Listen(IPAddress.Parse(config.Address), config.Port, listenOptions => ConfigureHttps(config.Https, listenOptions, fallbackToDefault));
+    else
+        options.ListenLocalhost(config.Port, listenOptions => ConfigureHttps(config.Https, listenOptions, fallbackToDefault));
+    
+    static void ConfigureHttps(HttpsConfiguration? httpsConfig, ListenOptions listenOptions, bool fallbackToDefault)
     {
-        options.Listen(IPAddress.Parse(config.Address), config.Port, listenOptions =>
+        if (httpsConfig?.Inline != null)
         {
-            if (config.Https?.Inline != null)
-            {
-                var certPem = config.Https.Inline.Certificate;
-                var keyPem = config.Https.Inline.PrivateKey;
-                var x509 = X509Certificate2.CreateFromPem(certPem, keyPem);
-                listenOptions.UseHttps(x509);
-                return;
-            }
-
-            if (config.Https?.File != null)
-            {
-                var certPem = File.ReadAllText(config.Https.File.CertificatePath);
-                var keyPem = File.ReadAllText(config.Https.File.PrivateKeyPath);
-                var x509 = X509Certificate2.CreateFromPem(certPem, keyPem);
-                listenOptions.UseHttps(x509);
-                return;
-            }
-        });
-        return;
+            var certPem = httpsConfig.Inline.Certificate;
+            var keyPem = httpsConfig.Inline.PrivateKey;
+            var x509 = X509Certificate2.CreateFromPem(certPem, keyPem);
+            listenOptions.UseHttps(x509);
+            Console.WriteLine($"Using inline cert");
+        }
+        else if (httpsConfig?.File != null)
+        {
+            var certPem = File.ReadAllText(httpsConfig.File.CertificatePath);
+            var keyPem = File.ReadAllText(httpsConfig.File.PrivateKeyPath);
+            var x509 = X509Certificate2.CreateFromPem(certPem, keyPem);
+            listenOptions.UseHttps(x509);
+            Console.WriteLine($"Using file cert");
+        }
+        else if (fallbackToDefault)
+        {
+            listenOptions.UseHttps();
+            Console.WriteLine($"Using default cert");
+        }
     }
-
-    options.ListenLocalhost(config.Port, listenOptions =>
-    {
-        if (config.Https?.Inline != null)
-        {
-            var certPem = config.Https.Inline.Certificate;
-            var keyPem = config.Https.Inline.PrivateKey;
-            var x509 = X509Certificate2.CreateFromPem(certPem, keyPem);
-            listenOptions.UseHttps(x509);
-            return;
-        }
-
-        if (config.Https?.File != null)
-        {
-            var certPem = File.ReadAllText(config.Https.File.CertificatePath);
-            var keyPem = File.ReadAllText(config.Https.File.PrivateKeyPath);
-            var x509 = X509Certificate2.CreateFromPem(certPem, keyPem);
-            listenOptions.UseHttps(x509);
-            return;
-        }
-    });
 });
+
 
 builder.Services.AddCors(options =>
 {
@@ -188,6 +177,10 @@ builder.Services.AddCors(options =>
             .AllowCredentials();
     });
 });
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto);
+
 
 var app = builder.Build();
 
@@ -283,6 +276,14 @@ using (var scope = app.Services.CreateScope())
 
 app.UseDeveloperExceptionPage();
 app.UseForwardedHeaders();
+
+if (!app.Environment.IsDevelopment())
+{
+    Console.WriteLine("Configure HSTS and HTTPS redirection");
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
+
 app.UseRouting();
 
 app.UseSession();
