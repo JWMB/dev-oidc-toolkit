@@ -35,12 +35,19 @@
 else
 {
 <form id="loginWithPassword" method="post">
+	@if (!ViewData.ModelState.IsValid)
+	{
+		<div>
+			@Html.ValidationSummary()
+		</div>
+	}
 
 	<label for="email">Email or username</label>
-	<input asp-for="Input.EmailOrUsername" id="email">
+		<input asp-for="Credentials.EmailOrUsername" id="email">
 
 	<label for="password">Password</label>
-	<input asp-for="Input.Password" id="password" type="password" />
+		<input asp-for="Credentials.Password" id="password" type="password" />
+
 		
 	<button type="submit" asp-page-handler="Password">Log In</button>
 </form>

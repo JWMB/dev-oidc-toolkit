@@ -17,6 +17,9 @@ public class LoginPageModel(SignInManager<DevOidcToolkitUser> signInManager, Use
     [BindProperty]
     public required InputModel Input { get; set; }
 
+    [BindProperty]
+    public required CredentialsModel Credentials { get; set; }
+
     [TempData]
     public required string ErrorMessage { get; set; }
 
@@ -30,7 +33,10 @@ public class LoginPageModel(SignInManager<DevOidcToolkitUser> signInManager, Use
 
         [Display(Name = "Remember me?")]
         public required bool RememberMe { get; set; }
+    }
 
+    public class CredentialsModel
+    {
         public string EmailOrUsername { get; set; } = "";
         public string? Password { get; set; }
     }
@@ -46,8 +52,10 @@ public class LoginPageModel(SignInManager<DevOidcToolkitUser> signInManager, Use
         PopulateEmails();
         if (Request.Query.TryGetValue(OpenIddict.Abstractions.OpenIddictConstants.Parameters.LoginHint, out var loginHints))
         {
-            Input ??= new InputModel { Email = "", RememberMe = false, EmailOrUsername = "" };
-            Input.EmailOrUsername = $"{loginHints}";
+            Credentials ??= new CredentialsModel { EmailOrUsername = "" };
+            Credentials.EmailOrUsername = $"{loginHints}";
+
+            Input ??= new InputModel { Email = "", RememberMe = false };
             Input.Email = $"{loginHints}";
         }
     }
@@ -65,10 +73,10 @@ public class LoginPageModel(SignInManager<DevOidcToolkitUser> signInManager, Use
 
     public async Task<IActionResult> OnPostPasswordAsync(string? returnUrl = null)
     {
-        var user = await _userManager.FindByEmailAsync(Input.EmailOrUsername) ?? await _userManager.FindByNameAsync(Input.EmailOrUsername);
-        if (user != null && Input.Password?.Any() == true)
+        var user = await _userManager.FindByEmailAsync(Credentials.EmailOrUsername) ?? await _userManager.FindByNameAsync(Credentials.EmailOrUsername);
+        if (user != null && Credentials.Password?.Any() == true)
         {
-            await _signInManager.PasswordSignInAsync(user, Input.Password, Input.RememberMe, user.AccessFailedCount > 3);
+            await _signInManager.PasswordSignInAsync(user, Credentials.Password, Input.RememberMe, user.AccessFailedCount > 3);
             return LocalRedirect(returnUrl ?? Url.Content("/user"));
         }
 

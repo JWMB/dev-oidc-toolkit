@@ -7,6 +7,7 @@ using DevOidcToolkit.Infrastructure.Database;
 
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
@@ -69,20 +70,33 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.LoginPath = "/login";
     options.Events.OnRedirectToLogin = context =>
     {
-        var loginPath = context.Options.LoginPath;
-        var returnUrl = context.RedirectUri;
 
-        // Example: Extract email/username from somewhere, e.g. a query param or previous session
+        var redirectUri = context.RedirectUri;
         var loginHint = context.Request.Query[Parameters.LoginHint].ToString();
+        if (loginHint.Any())
+            redirectUri = QueryHelpers.AddQueryString(redirectUri, Parameters.LoginHint, loginHint);
 
-        // Rebuild the URL with login_hint
-        var redirectUrl = $"{loginPath}?ReturnUrl={Uri.EscapeDataString(returnUrl)}";
-        if (!string.IsNullOrEmpty(loginHint))
-        {
-            redirectUrl += $"&{Parameters.LoginHint}={Uri.EscapeDataString(loginHint)}";
-        }
+        context.Response.Redirect(redirectUri);
+        //var loginPath = context.Options.LoginPath;
+        //if (Uri.IsWellFormedUriString(context.RedirectUri, UriKind.Absolute))
+        //{
+        //    var u = new Uri(context.RedirectUri);
+        //    new QueryCollection(u.Query);
+        //}
+        //var query = new Dictionary<string, string?> {
+        //    ["ReturnUrl"] = context.RedirectUri.Any()
+        //        ? (Uri.IsWellFormedUriString(context.RedirectUri, UriKind.Absolute) ? new Uri(context.RedirectUri).PathAndQuery : context.RedirectUri) : null,
+        //    [Parameters.LoginHint] = context.Request.Query[Parameters.LoginHint].ToString()
+        //};
 
-        context.Response.Redirect(redirectUrl);
+        //var redirectUrl = $"{loginPath}?ReturnUrl={Uri.EscapeDataString(relativeRedirect)}";
+        //var loginHint = context.Request.Query[Parameters.LoginHint].ToString();
+        //if (!string.IsNullOrEmpty(loginHint))
+        //    redirectUrl += $"&{Parameters.LoginHint}={Uri.EscapeDataString(loginHint)}";
+
+        //var queryString = string.Join("&", query.Where(o => string.IsNullOrEmpty(o.Value) == false).Select(o => $"{o.Key}={Uri.EscapeDataString(o.Value!)}"));
+
+        //context.Response.Redirect($"{loginPath}?{queryString}");
         return Task.CompletedTask;
     };
 });
