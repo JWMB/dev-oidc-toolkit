@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
 
+using DevOidcToolkit;
 using DevOidcToolkit.Infrastructure.Configuration;
 using DevOidcToolkit.Infrastructure.Database;
 
@@ -249,25 +250,7 @@ using (var scope = app.Services.CreateScope())
         if (await openIddictManager.FindByClientIdAsync(client.Id) is not null)
             continue;
 
-        var clientApp = DevOidcToolkit.Pages.ClientsPageModel.CreateDescriptor(new OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreApplication
-        {
-            ClientId = client.Id,
-            ClientSecret = client.Secret,
-            ConsentType = ConsentTypes.Explicit,
-            Permissions = "[x]".Replace("x", string.Join(", ", new[] {
-                Permissions.Endpoints.Authorization,
-                Permissions.Endpoints.Token,
-                Permissions.Endpoints.EndSession,
-
-                Permissions.GrantTypes.AuthorizationCode,
-
-                Permissions.ResponseTypes.Code,
-
-                Permissions.Scopes.Profile,
-                Permissions.Scopes.Email
-            }))
-        });
-        await openIddictManager.CreateAsync(clientApp);
+        await openIddictManager.CreateAsync(OpenIddictApplicationDescriptorExtensions.Create(client));
     }
 }
 
