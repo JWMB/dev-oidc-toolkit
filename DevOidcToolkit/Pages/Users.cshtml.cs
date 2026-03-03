@@ -34,14 +34,44 @@ public class UsersPageModel : PageModel
             new RenderOverride { PropertyName = nameof(DevOidcToolkitUser.UserName), ModifyInfo = pi => {
                 pi.Required = true;
                 pi.Pattern = @"\w+"; // probably min/max length?
+                pi.Autocomplete = "off";
             } },
             new RenderOverride { PropertyName = nameof(DevOidcToolkitUser.Email), ModifyInfo = pi => pi.Required = true },
             new RenderOverride { PropertyName = nameof(DevOidcToolkitUser.NormalizedEmail), ModifyInfo = pi => pi.ReadOnly = true },
             new RenderOverride { PropertyName = nameof(DevOidcToolkitUser.NormalizedUserName), ModifyInfo = pi => pi.ReadOnly = true }
         ];
+
+    private List<PropertyWrapperBase> GetPropertyWrappers(DevOidcToolkitUser? target = null)
+    {
+        var overrides = GetRenderOverrides();
+        var props = FormGenerator.AnalyzeProperties<DevOidcToolkitUser>(overrides?.Where(o => o.ModifyInfo != null)
+            .Select(o => KeyValuePair.Create(o.PropertyName, o.ModifyInfo!)));
+
+        // Replace PasswordHash in GUI with Password, which gets hashed before saving to PasswordHash
+        var propPwdHash = props.Single(o => o.Name == nameof(DevOidcToolkitUser.PasswordHash));
+        propPwdHash.Hidden = true;
+
+        props.Insert(props.FindIndex(o => o.Name == "Email") + 1, new PropertyProxy(
+            propPwdHash,
+            transformSetValue: val => target != null && val is string str ? userManager.PasswordHasher.HashPassword(target, str) : val
+        )
+        {
+            Name = propPwdHash.Name,
+            DisplayName = "Password",
+            Type = typeof(string),
+            Secret = true,
+            Autocomplete = "off"
+        });
+        return props;
+    }
+
+    public string GetFormHtml()
+    {
+        return FormGenerator.Render(GetPropertyWrappers(), Input, GetRenderOverrides());
+    }
+
     public async Task<IActionResult> OnGetAsync()
     {
-        new System.Text.RegularExpressions.Regex("");
         Users = await userManager.Users.ToListAsync();
 
         var qEmail = Request.Query["email"].FirstOrDefault();
@@ -115,6 +145,9 @@ public class UsersPageModel : PageModel
             : (input.Email?.Any() == true 
                 ? await userManager.FindByEmailAsync(input.Email)
                 : null);
+
+        foreach (var item in GetPropertyWrappers(input).OfType<PropertyProxy>())
+            item.SetValue(input, item.GetValue(input));
 
         if (existing != null)
         {

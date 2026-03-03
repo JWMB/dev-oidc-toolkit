@@ -7,9 +7,9 @@
 
     public abstract class HtmlElementRendererBase : IElementRenderer
     {
-        protected readonly PropertyInfoWrapper p;
+        protected readonly PropertyWrapperBase p;
 
-        public HtmlElementRendererBase(PropertyInfoWrapper p)
+        public HtmlElementRendererBase(PropertyWrapperBase p)
         {
             this.p = p;
         }
@@ -51,7 +51,7 @@
 
         public abstract string Render(object? value);
 
-        public static IElementRenderer ResolveRenderer(PropertyInfoWrapper p, object? value)
+        public static IElementRenderer ResolveRenderer(PropertyWrapperBase p, object? value)
         {
             if (p.Type == typeof(bool))
                 return new HtmlInputBoolRenderer(p);
@@ -66,13 +66,13 @@
         }
     }
 
-    public class HtmlUnhandledRenderer(PropertyInfoWrapper p) : HtmlElementRendererBase(p)
+    public class HtmlUnhandledRenderer(PropertyWrapperBase p) : HtmlElementRendererBase(p)
     {
         public override string Render(object? value) =>
-            $"""<div>{p.PropertyInfo.PropertyType.Name} {string.Join(", ", p.PropertyInfo.PropertyType.GenericTypeArguments.Select(o => o.Name))}</div> """;
+            $"""<div>{p.Type.Name} {string.Join(", ", p.Type.GenericTypeArguments.Select(o => o.Name))}</div> """;
     }
 
-    public class HtmlInputStringRenderer(PropertyInfoWrapper p) : HtmlElementRendererBase(p)
+    public class HtmlInputStringRenderer(PropertyWrapperBase p) : HtmlElementRendererBase(p)
     {
         public override string Render(object? value)
         {
@@ -84,19 +84,19 @@
         }
     }
 
-    public class HtmlInputNumberRenderer(PropertyInfoWrapper p) : HtmlElementRendererBase(p)
+    public class HtmlInputNumberRenderer(PropertyWrapperBase p) : HtmlElementRendererBase(p)
     {
         public override string Render(object? value) =>
             RenderElement("input",
                 GetTuplesAsDict([("type", "number"), ("value", value?.ToString() ?? (p.Nullable ? null : p.DefaultValue?.ToString() ?? "0"))]));
     }
-    public class HtmlInputDateRenderer(PropertyInfoWrapper p) : HtmlElementRendererBase(p)
+    public class HtmlInputDateRenderer(PropertyWrapperBase p) : HtmlElementRendererBase(p)
     {
         public override string Render(object? value) =>
             RenderElement("input",
                 GetTuplesAsDict([("type", "date"), ("value", value?.ToString())]));
     }
-    public class HtmlInputBoolRenderer(PropertyInfoWrapper p) : HtmlElementRendererBase(p)
+    public class HtmlInputBoolRenderer(PropertyWrapperBase p) : HtmlElementRendererBase(p)
     {
         public override string Render(object? value) =>
             RenderElement("input",

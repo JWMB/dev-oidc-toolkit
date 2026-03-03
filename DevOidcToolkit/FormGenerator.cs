@@ -9,8 +9,8 @@ namespace DevOidcToolkit
             // TODO: how can we update the existing without manually setting all properties?
             foreach (var p in AnalyzeProperties<T>())
             {
-                var prev = p.PropertyInfo.GetValue(to);
-                var next = p.PropertyInfo.GetValue(from);
+                var prev = p.GetValue(to);
+                var next = p.GetValue(from);
                 var update = false;
                 if (prev == null)
                     update = next != null;
@@ -20,18 +20,18 @@ namespace DevOidcToolkit
                     update = prev.Equals(next) == false;
 
                 if (update)
-                    p.PropertyInfo.SetValue(to, next);
+                    p.SetValue(to, next);
             }
         }
 
-        public static List<PropertyInfoWrapper> AnalyzeProperties<T>(IEnumerable<KeyValuePair<string, Action<PropertyInfoWrapper>>>? overrides = null)
+        public static List<PropertyWrapperBase> AnalyzeProperties<T>(IEnumerable<KeyValuePair<string, Action<PropertyWrapperBase>>>? overrides = null)
         {
             return typeof(T).GetProperties()
                 .Where(p => p.CanRead && p.CanWrite)
                 .Select((p, i) => new
                 {
                     OriginalIndex = i,
-                    PEx = PropertyInfoWrapper.From(p),
+                    PEx = PropertyWrapper.From(p),
                 })
                 .Select(o =>
                 {
@@ -43,7 +43,7 @@ namespace DevOidcToolkit
                 })
                 .OrderByDescending(o => o.PEx.Required)
                 .ThenBy(o => o.OriginalIndex)
-                .Select(o => o.PEx).Cast<PropertyInfoWrapper>().ToList();
+                .Select(o => o.PEx).Cast<PropertyWrapperBase>().ToList();
         }
 
         public static bool IsModelValidSuperStrange<T>(ModelStateDictionary modelState, T model)
@@ -68,7 +68,7 @@ namespace DevOidcToolkit
                         if (onErr != null)
                         {
                             var bVal = item.Value?.AttemptedValue == "on";
-                            p.PropertyInfo.SetValue(model, bVal);
+                            p.SetValue(model, bVal);
                             modelState.SetModelValue(item.Key, bVal, $"{bVal}".ToLower());
                             errors.Remove(onErr);
                         }
@@ -89,7 +89,7 @@ namespace DevOidcToolkit
             );
         }
 
-        public static string Render(object? value, PropertyInfoWrapper p, RenderOverride? renderOverride = null)
+        public static string Render(object? value, PropertyWrapperBase p, RenderOverride? renderOverride = null)
         {
             if (renderOverride?.Renderer != null)
                 return renderOverride.Renderer(p, value);
@@ -98,31 +98,38 @@ namespace DevOidcToolkit
                 .Render(value);
         }
 
-        public static string Render<T>(T? model = default, IEnumerable<RenderOverride>? overrides = null)
+        public static string Render<T>(IEnumerable<PropertyWrapperBase> props, T? model = default, IEnumerable<RenderOverride>? overrides = null)
         {
             var strs = new List<string>();
-            var props = AnalyzeProperties<T>(overrides?.Where(o => o.ModifyInfo != null).Select(o => KeyValuePair.Create(o.PropertyName, o.ModifyInfo!)));
-            foreach (var p in props)
+
+            foreach (var p in props.Where(o => !o.Hidden))
             {
                 object? value = null;
                 if (model != null)
-                    value = p.PropertyInfo.GetValue(model); //?.ToString();
+                    value = p.GetValue(model); //?.ToString();
                 if (value == null && p.Required && p.DefaultValue != null)
                     value = p.DefaultValue;
 
-                strs.Add($"""<label for="{p.Name}">{(p.Required ? "* " : "")}{p.Name}</label> """);
+                strs.Add($"""<label for="{p.Name}">{(p.Required ? "* " : "")}{p.DisplayName ?? p.Name}</label> """);
                 strs.Add(Render(value, p, overrides?.SingleOrDefault(o => o.PropertyName == p.Name)));
             }
 
             return string.Join("\n", strs);
+        }
+
+        public static string Render<T>(T? model = default, IEnumerable<RenderOverride>? overrides = null)
+        {
+            var props = AnalyzeProperties<T>(overrides?.Where(o => o.ModifyInfo != null)
+                .Select(o => KeyValuePair.Create(o.PropertyName, o.ModifyInfo!)));
+            return Render(props, model, overrides);
         }
     }
 
     public class RenderOverride
     {
         public required string PropertyName { get; set; }
-        public Func<PropertyInfoWrapper, object?, string>? Renderer { get; set; }
-        public Action<PropertyInfoWrapper>? ModifyInfo { get; set; }
+        public Func<PropertyWrapperBase, object?, string>? Renderer { get; set; }
+        public Action<PropertyWrapperBase>? ModifyInfo { get; set; }
         //public Action<Dictionary<string, string?>>? ModifyAttributes { get; set; } // TODO: HTML-specific, should be in a separate implementation
     }
 }

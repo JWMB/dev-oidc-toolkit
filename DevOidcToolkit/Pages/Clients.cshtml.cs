@@ -110,6 +110,5 @@ public partial class ClientsPageModel : PageModel
             new RenderOverride { PropertyName = nameof(OpenIddictEntityFrameworkCoreApplication.ClientId), ModifyInfo = pi => {
                 pi.Autocomplete = "off";
             } }
-
         ];
 }
