@@ -103,6 +103,13 @@ public partial class ClientsPageModel : PageModel
 
     public List<RenderOverride> GetRenderOverrides() =>
         [
-            new RenderOverride { PropertyName = nameof(OpenIddictEntityFrameworkCoreApplication.ClientSecret), ModifyInfo = pi => pi.Secret = true }
+            new RenderOverride { PropertyName = nameof(OpenIddictEntityFrameworkCoreApplication.ClientSecret), ModifyInfo = pi => {
+                pi.Secret = true;
+                pi.Autocomplete = "off";
+            } },
+            new RenderOverride { PropertyName = nameof(OpenIddictEntityFrameworkCoreApplication.ClientId), ModifyInfo = pi => {
+                pi.Autocomplete = "off";
+            } }
+
         ];
 }

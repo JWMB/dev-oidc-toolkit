@@ -28,7 +28,8 @@
                 ["minlength"] = p.MinLength.HasValue ? $"{p.MinLength}" : null,
                 ["maxlength"] = p.MaxLength.HasValue ? $"{p.MaxLength}" : null,
                 ["pattern"] = p.Pattern,
-                ["step"] = p.Step
+                ["step"] = p.Step,
+                ["autocomplete"] = p.Autocomplete
             }.Where(o => o.Value != null)
             .ToDictionary();
         }

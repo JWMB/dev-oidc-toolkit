@@ -17,6 +17,7 @@ namespace DevOidcToolkit
         public bool Required { get; set; }
         public bool Secret { get; set; }
         public bool ReadOnly { get; set; }
+        public string? Autocomplete { get; set; }
         public string? Syntax { get; set; }
 
         [StringSyntax(StringSyntaxAttribute.Regex)]
