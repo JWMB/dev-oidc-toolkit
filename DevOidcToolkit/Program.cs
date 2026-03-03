@@ -247,29 +247,26 @@ using (var scope = app.Services.CreateScope())
     foreach (var client in config.Clients)
     {
         if (await openIddictManager.FindByClientIdAsync(client.Id) is not null)
-        {
             continue;
-        }
 
-        var clientApp = new OpenIddictApplicationDescriptor()
+        var clientApp = DevOidcToolkit.Pages.ClientsPageModel.CreateDescriptor(new OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreApplication
         {
             ClientId = client.Id,
             ClientSecret = client.Secret,
-            Permissions = {
+            ConsentType = ConsentTypes.Explicit,
+            Permissions = "[x]".Replace("x", string.Join(", ", new[] {
                 Permissions.Endpoints.Authorization,
                 Permissions.Endpoints.Token,
                 Permissions.Endpoints.EndSession,
 
                 Permissions.GrantTypes.AuthorizationCode,
+
                 Permissions.ResponseTypes.Code,
 
                 Permissions.Scopes.Profile,
                 Permissions.Scopes.Email
-            },
-            ConsentType = ConsentTypes.Explicit
-        };
-        client.RedirectUris.ForEach(redirectUri => clientApp.RedirectUris.Add(new Uri(redirectUri)));
-        client.PostLogoutRedirectUris.ForEach(redirectUri => clientApp.PostLogoutRedirectUris.Add(new Uri(redirectUri)));
+            }))
+        });
         await openIddictManager.CreateAsync(clientApp);
     }
 }
