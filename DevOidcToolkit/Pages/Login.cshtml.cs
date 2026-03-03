@@ -44,6 +44,12 @@ public class LoginPageModel(SignInManager<DevOidcToolkitUser> signInManager, Use
             ModelState.AddModelError(string.Empty, ErrorMessage);
         }
         PopulateEmails();
+        if (Request.Query.TryGetValue(OpenIddict.Abstractions.OpenIddictConstants.Parameters.LoginHint, out var loginHints))
+        {
+            Input ??= new InputModel { Email = "", RememberMe = false, EmailOrUsername = "" };
+            Input.EmailOrUsername = $"{loginHints}";
+            Input.Email = $"{loginHints}";
+        }
     }
 
     private void PopulateEmails()

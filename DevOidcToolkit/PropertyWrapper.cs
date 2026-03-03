@@ -12,8 +12,8 @@ namespace DevOidcToolkit
         public required string Name { get; set; }
         public string? DisplayName { get; set; }
 
-        public abstract object? GetValue(object obj);
-        public abstract void SetValue(object obj, object? value);
+        public abstract object? GetValue(object? obj);
+        public abstract void SetValue(object? obj, object? value);
 
         public bool Hidden { get; set; }
         public object? DefaultValue { get; set; }
@@ -45,10 +45,10 @@ namespace DevOidcToolkit
             _transformSetValue = transformSetValue;
             _transformGetValue = transformGetValue;
         }
-        public override object? GetValue(object obj) 
+        public override object? GetValue(object? obj) 
             => _transformGetValue == null ? _other.GetValue(obj) : _transformGetValue(_other.GetValue(obj));
 
-        public override void SetValue(object obj, object? value)
+        public override void SetValue(object? obj, object? value)
             => _other.SetValue(obj, _transformSetValue == null ? value : _transformSetValue(value));
     }
 
@@ -91,8 +91,8 @@ namespace DevOidcToolkit
             };
         }
 
-        public override object? GetValue(object obj) => PropertyInfo.GetValue(obj, null);
+        public override object? GetValue(object? obj) => PropertyInfo.GetValue(obj, null);
 
-        public override void SetValue(object obj, object? value) => PropertyInfo.SetValue(obj, value, null);
+        public override void SetValue(object? obj, object? value) => PropertyInfo.SetValue(obj, value, null);
     }
 }

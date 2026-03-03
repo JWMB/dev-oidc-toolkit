@@ -67,6 +67,24 @@ builder.Services.AddIdentity<DevOidcToolkitUser, IdentityRole>(options =>
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.LoginPath = "/login";
+    options.Events.OnRedirectToLogin = context =>
+    {
+        var loginPath = context.Options.LoginPath;
+        var returnUrl = context.RedirectUri;
+
+        // Example: Extract email/username from somewhere, e.g. a query param or previous session
+        var loginHint = context.Request.Query[Parameters.LoginHint].ToString();
+
+        // Rebuild the URL with login_hint
+        var redirectUrl = $"{loginPath}?ReturnUrl={Uri.EscapeDataString(returnUrl)}";
+        if (!string.IsNullOrEmpty(loginHint))
+        {
+            redirectUrl += $"&{Parameters.LoginHint}={Uri.EscapeDataString(loginHint)}";
+        }
+
+        context.Response.Redirect(redirectUrl);
+        return Task.CompletedTask;
+    };
 });
 
 // Add session support with secure defaults
