@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
 
 using DevOidcToolkit;
@@ -68,38 +69,42 @@ builder.Services.AddIdentity<DevOidcToolkitUser, IdentityRole>(options =>
 
 builder.Services.ConfigureApplicationCookie(options =>
 {
+    // TODO: cookie doesn't appear in response when behind proxy
+    //options.Cookie.Name = "ThisIsMyNewName";
+    //options.Cookie.SameSite = SameSiteMode.None;
+    //options.Cookie.Domain = "test.bngaged.io:8088";
+    //if (options.CookieManager != null) { }
     options.LoginPath = "/login";
+
+    options.Events.OnSignedIn = context =>
+    {
+        Log(context.HttpContext, context.Principal, "OnSignedIn");
+        return Task.CompletedTask;
+    };
+    options.Events.OnSigningIn = context =>
+    {
+        Log(context.HttpContext, context.Principal, "OnSigningIn");
+        return Task.CompletedTask;
+    };
+    options.Events.OnValidatePrincipal = context =>
+    {
+        Log(context.HttpContext, context.Principal, "OnValidatePrincipal");
+        return Task.CompletedTask;
+    };
     options.Events.OnRedirectToLogin = context =>
     {
-
         var redirectUri = context.RedirectUri;
         var loginHint = context.Request.Query[Parameters.LoginHint].ToString();
         if (loginHint.Any())
             redirectUri = QueryHelpers.AddQueryString(redirectUri, Parameters.LoginHint, loginHint);
 
         context.Response.Redirect(redirectUri);
-        //var loginPath = context.Options.LoginPath;
-        //if (Uri.IsWellFormedUriString(context.RedirectUri, UriKind.Absolute))
-        //{
-        //    var u = new Uri(context.RedirectUri);
-        //    new QueryCollection(u.Query);
-        //}
-        //var query = new Dictionary<string, string?> {
-        //    ["ReturnUrl"] = context.RedirectUri.Any()
-        //        ? (Uri.IsWellFormedUriString(context.RedirectUri, UriKind.Absolute) ? new Uri(context.RedirectUri).PathAndQuery : context.RedirectUri) : null,
-        //    [Parameters.LoginHint] = context.Request.Query[Parameters.LoginHint].ToString()
-        //};
-
-        //var redirectUrl = $"{loginPath}?ReturnUrl={Uri.EscapeDataString(relativeRedirect)}";
-        //var loginHint = context.Request.Query[Parameters.LoginHint].ToString();
-        //if (!string.IsNullOrEmpty(loginHint))
-        //    redirectUrl += $"&{Parameters.LoginHint}={Uri.EscapeDataString(loginHint)}";
-
-        //var queryString = string.Join("&", query.Where(o => string.IsNullOrEmpty(o.Value) == false).Select(o => $"{o.Key}={Uri.EscapeDataString(o.Value!)}"));
-
-        //context.Response.Redirect($"{loginPath}?{queryString}");
         return Task.CompletedTask;
     };
+
+    static void Log(HttpContext ctx, ClaimsPrincipal? principal, string eventName)
+        => GetLogger(ctx)?.LogInformation($"Event={eventName} Authenticated={principal?.Identity?.IsAuthenticated} Type={principal?.Identity?.AuthenticationType} Name={principal?.Identity?.Name}");
+    static ILogger? GetLogger(HttpContext ctx) => ctx.RequestServices.GetRequiredService<ILoggerFactory>()?.CreateLogger("Cookies");
 });
 
 // Add session support with secure defaults
@@ -151,7 +156,7 @@ builder.Services.AddOpenIddict()
                .EnableStatusCodePagesIntegration()
                .EnableEndSessionEndpointPassthrough();
 
-        if (builder.Environment.EnvironmentName == "Development")
+        if (builder.Environment.IsDevelopment()) //builder.Environment.EnvironmentName == "Development")
             oidBuilder.DisableTransportSecurityRequirement();
     });
 
@@ -292,7 +297,7 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseDeveloperExceptionPage();
-app.UseForwardedHeaders();
+app.UseForwardedHeaders(); // similar to? https://learn.microsoft.com/en-us/answers/questions/1329133/issues-with-openidconnect-and-ms-identity-web-behi
 
 if (!app.Environment.IsDevelopment())
 {
