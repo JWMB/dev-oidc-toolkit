@@ -10,6 +10,11 @@ public class DevOidcToolkitConfiguration
     public const string Position = "DevOidcToolkit";
 
     public int Port { get; set; } = 80;
+
+    /// <summary>
+    /// For CORS when behind proxy
+    /// </summary>
+    public string? PublicAuthority { get; set; }
     public string? Address { get; set; }
     public string? Issuer { get; set; }
 
@@ -19,6 +24,7 @@ public class DevOidcToolkitConfiguration
     [ValidateObjectMembers] public HttpsConfiguration? Https { get; set; }
     [ValidateObjectMembers] public LoggingConfiguration Logging { get; set; } = new LoggingConfiguration();
     [ValidateObjectMembers] public DatabaseConfiguration Database { get; set; } = new DatabaseConfiguration();
+    public string? DataProtectionDirectory { get; set; }
 }
 
 public class UserConfiguration

@@ -5,6 +5,7 @@ using DevOidcToolkit;
 using DevOidcToolkit.Infrastructure.Configuration;
 using DevOidcToolkit.Infrastructure.Database;
 
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.WebUtilities;
@@ -201,6 +202,7 @@ builder.Services.AddCors(options =>
         var origins = config.Clients
             .SelectMany(client => client.RedirectUris.Concat(client.PostLogoutRedirectUris))
             .Select(uri => new Uri(uri).GetLeftPart(UriPartial.Authority))
+            .Concat(string.IsNullOrEmpty(config.PublicAuthority) ? [] : [config.PublicAuthority])
             .Distinct()
             .ToArray();
 
@@ -214,6 +216,9 @@ builder.Services.AddCors(options =>
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto);
 
+if (!builder.Environment.IsDevelopment() && !string.IsNullOrEmpty(config.DataProtectionDirectory))
+    builder.Services.AddDataProtection() // Still getting "The antiforgery token could not be decrypted"...
+        .PersistKeysToFileSystem(new DirectoryInfo(config.DataProtectionDirectory));
 
 var app = builder.Build();
 
