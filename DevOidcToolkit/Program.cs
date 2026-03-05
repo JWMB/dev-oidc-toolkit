@@ -5,6 +5,7 @@ using System.Security.Cryptography.X509Certificates;
 using DevOidcToolkit;
 using DevOidcToolkit.Infrastructure.Configuration;
 using DevOidcToolkit.Infrastructure.Database;
+using DevOidcToolkit.Pages;
 
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
@@ -139,10 +140,9 @@ builder.Services.AddOpenIddict()
         options.RegisterScopes(Scopes.OpenId, Scopes.Email, Scopes.Profile);
         options.RegisterClaims(Claims.Email, Claims.GivenName, Claims.FamilyName, Claims.Role);
 
-        if (config.Issuer is not null)
-        {
-            options.SetIssuer(new Uri(config.Issuer));
-        }
+        var issuer = config.Issuer ?? config.PublicAuthority;
+        if (issuer is not null)
+            options.SetIssuer(new Uri(issuer));
 
         // Register the signing and encryption credentials.
         options.AddEphemeralEncryptionKey()
@@ -268,12 +268,10 @@ using (var scope = app.Services.CreateScope())
         if (user.Password?.Any() == true)
             userEntity.PasswordHash = userManager.PasswordHasher.HashPassword(userEntity, user.Password);
 
-        var result = await userManager.CreateAsync(userEntity);
-
-        if (!result.Succeeded)
-        {
-            throw new Exception($"Failed to set up user: ${string.Join(", ", result.Errors.Select(error => error.Description))}");
-        }
+        await UsersPageModel.Upsert(userEntity, userManager);
+        //var result = await userManager.CreateAsync(userEntity);
+        //if (!result.Succeeded)
+        //    throw new Exception($"Failed to set up user: ${string.Join(", ", result.Errors.Select(error => error.Description))}");
 
         foreach (var role in user.Roles)
         {

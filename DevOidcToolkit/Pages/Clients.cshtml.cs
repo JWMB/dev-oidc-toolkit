@@ -16,17 +16,17 @@ using OpenIddict.EntityFrameworkCore.Models;
 public partial class ClientsPageModel : PageModel
 {
     private readonly IOpenIddictApplicationManager _applicationManager;
-    private readonly DevOidcToolkitContext dbContext;
+    private readonly DevOidcToolkitContext _dbContext;
 
     public ClientsPageModel(IOpenIddictApplicationManager applicationManager, DevOidcToolkitContext dbContext)
     {
         _applicationManager = applicationManager;
-        this.dbContext = dbContext;
+        _dbContext = dbContext;
     }
 
     public async Task<IActionResult> OnGetAsync()
     {
-        Clients = (await dbContext.Set<OpenIddictEntityFrameworkCoreApplication>().ToListAsync()) ?? [];
+        Clients = (await _dbContext.Set<OpenIddictEntityFrameworkCoreApplication>().ToListAsync()) ?? [];
 
         var qId = Request.Query["clientid"].FirstOrDefault();
         if (!string.IsNullOrEmpty(qId))
@@ -72,14 +72,21 @@ public partial class ClientsPageModel : PageModel
     private async Task Upsert(OpenIddictEntityFrameworkCoreApplication input)
     {
         var existing = string.IsNullOrEmpty(input.ClientId) ? null : await _applicationManager.FindByClientIdAsync(input.ClientId);
-
         if (existing is OpenIddictEntityFrameworkCoreApplication existingApp)
         {
             //FormGenerator.UpdateModel(input, existingApp);
             var descriptor = OpenIddictApplicationDescriptorExtensions.Create(input);
             await _applicationManager.PopulateAsync(existingApp, descriptor);
-            await _applicationManager.UpdateAsync(existingApp);
-            dbContext.Update(existingApp);
+            if (input.ClientSecret?.Any() == true)
+            {
+                await _applicationManager.UpdateAsync(existingApp, input.ClientSecret);
+                // TODO: we shouldn't keep plain secret - set the hashed secret
+                // existingApp.ClientSecret =  await _storeForSecrets.GetClientSecretAsync(existingApp, CancellationToken.None);
+            }
+            else
+                await _applicationManager.UpdateAsync(existingApp);
+
+            _dbContext.Update(existingApp);
         }
         else
         {
@@ -87,10 +94,10 @@ public partial class ClientsPageModel : PageModel
 
             var clientApp = OpenIddictApplicationDescriptorExtensions.Create(input);
             await _applicationManager.CreateAsync(clientApp);
-            await dbContext.AddAsync(input);
+            await _dbContext.AddAsync(input);
         }
 
-        Clients = (await dbContext.Set<OpenIddictEntityFrameworkCoreApplication>().ToListAsync()) ?? [];
+        Clients = (await _dbContext.Set<OpenIddictEntityFrameworkCoreApplication>().ToListAsync()) ?? [];
     }
 
     [BindProperty]
