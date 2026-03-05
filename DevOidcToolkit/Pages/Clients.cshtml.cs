@@ -1,138 +1,121 @@
+﻿namespace DevOidcToolkit.Pages;
+
+using System.Text.Json;
+
 using DevOidcToolkit.Infrastructure.Database;
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 
 using OpenIddict.Abstractions;
-using OpenIddict.Core;
 using OpenIddict.EntityFrameworkCore.Models;
 
-namespace DevOidcToolkit.Pages;
-
-public class ClientsModel : PageModel
+[Authorize]
+public partial class ClientsPageModel : PageModel
 {
     private readonly IOpenIddictApplicationManager _applicationManager;
-    private readonly DevOidcToolkitContext _context;
+    private readonly DevOidcToolkitContext _dbContext;
 
-    public ClientsModel(IOpenIddictApplicationManager applicationManager, DevOidcToolkitContext context)
+    public ClientsPageModel(IOpenIddictApplicationManager applicationManager, DevOidcToolkitContext dbContext)
     {
         _applicationManager = applicationManager;
-        _context = context;
+        _dbContext = dbContext;
     }
 
-    public List<OpenIddictEntityFrameworkCoreApplication> Clients { get; set; } = [];
-    public string? SuccessMessage { get; set; }
-    public string? ErrorMessage { get; set; }
-
-    [BindProperty]
-    public InputModel? Input { get; set; }
-
-    public class InputModel
+    public async Task<IActionResult> OnGetAsync()
     {
-        public string ClientId { get; set; } = "";
-        public string ClientSecret { get; set; } = "";
-        public string RedirectUris { get; set; } = "";
-        public string PostLogoutRedirectUris { get; set; } = "";
+        Clients = (await _dbContext.Set<OpenIddictEntityFrameworkCoreApplication>().ToListAsync()) ?? [];
+
+        var qId = Request.Query["clientid"].FirstOrDefault();
+        if (!string.IsNullOrEmpty(qId))
+        {
+            Input = Clients.FirstOrDefault(o => string.Equals(o.ClientId, qId, StringComparison.OrdinalIgnoreCase));
+            if (Input != null)
+                JsonInput = JsonSerializer.Serialize(Input, new JsonSerializerOptions { WriteIndented = true });
+        }
+
+        return Page();
     }
 
-    public async Task OnGetAsync()
+    public async Task<IActionResult> OnPostSubmitJson()
     {
-        Clients = await _context.Set<OpenIddictEntityFrameworkCoreApplication>().ToListAsync();
-    }
-
-    public async Task<IActionResult> OnPostAsync()
-    {
-        if (!ModelState.IsValid || Input == null)
-        {
-            Clients = await _context.Set<OpenIddictEntityFrameworkCoreApplication>().ToListAsync();
+        if (JsonInput?.Any() != true)
             return Page();
-        }
-
-        if (string.IsNullOrWhiteSpace(Input.ClientId))
-        {
-            ModelState.AddModelError("Input.ClientId", "Client ID is required");
-            Clients = await _context.Set<OpenIddictEntityFrameworkCoreApplication>().ToListAsync();
-            return Page();
-        }
-
-        if (string.IsNullOrWhiteSpace(Input.ClientSecret))
-        {
-            ModelState.AddModelError("Input.ClientSecret", "Client Secret is required");
-            Clients = await _context.Set<OpenIddictEntityFrameworkCoreApplication>().ToListAsync();
-            return Page();
-        }
-
-        // Check if client already exists
-        var existingClient = await _applicationManager.FindByClientIdAsync(Input.ClientId);
-        if (existingClient != null)
-        {
-            ErrorMessage = $"Client with ID '{Input.ClientId}' already exists";
-            Clients = await _context.Set<OpenIddictEntityFrameworkCoreApplication>().ToListAsync();
-            return Page();
-        }
 
         try
         {
-            var clientApp = new OpenIddictApplicationDescriptor()
-            {
-                ClientId = Input.ClientId,
-                ClientSecret = Input.ClientSecret,
-                ConsentType = OpenIddictConstants.ConsentTypes.Explicit,
-                Permissions =
-                {
-                    OpenIddictConstants.Permissions.Endpoints.Authorization,
-                    OpenIddictConstants.Permissions.Endpoints.Token,
-                    OpenIddictConstants.Permissions.Endpoints.EndSession,
-                    OpenIddictConstants.Permissions.GrantTypes.AuthorizationCode,
-                    OpenIddictConstants.Permissions.ResponseTypes.Code,
-                    OpenIddictConstants.Permissions.Scopes.Profile,
-                    OpenIddictConstants.Permissions.Scopes.Email
-                }
-            };
-
-            if (!string.IsNullOrWhiteSpace(Input.RedirectUris))
-            {
-                var redirectUris = Input.RedirectUris.Split(',').Select(uri => uri.Trim()).Where(uri => !string.IsNullOrWhiteSpace(uri));
-                foreach (var uri in redirectUris)
-                {
-                    try
-                    {
-                        clientApp.RedirectUris.Add(new Uri(uri));
-                    }
-                    catch (UriFormatException)
-                    {
-                        throw new InvalidOperationException($"Invalid redirect URI: {uri}");
-                    }
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(Input.PostLogoutRedirectUris))
-            {
-                var postLogoutUris = Input.PostLogoutRedirectUris.Split(',').Select(uri => uri.Trim()).Where(uri => !string.IsNullOrWhiteSpace(uri));
-                foreach (var uri in postLogoutUris)
-                {
-                    try
-                    {
-                        clientApp.PostLogoutRedirectUris.Add(new Uri(uri));
-                    }
-                    catch (UriFormatException)
-                    {
-                        throw new InvalidOperationException($"Invalid post-logout redirect URI: {uri}");
-                    }
-                }
-            }
-
-            await _applicationManager.CreateAsync(clientApp);
-            SuccessMessage = $"Client '{Input.ClientId}' created successfully";
-            Input = new InputModel();
+            var input = JsonSerializer.Deserialize<OpenIddictEntityFrameworkCoreApplication>(JsonInput);
+            if (input == null)
+                throw new Exception("Not deserializable");
+            await Upsert(input);
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"Failed to create client: {ex.Message}";
+            throw;
+            //return 
         }
 
-        Clients = await _context.Set<OpenIddictEntityFrameworkCoreApplication>().ToListAsync();
         return Page();
     }
+    public async Task<IActionResult> OnPost()
+    {
+        if (!FormGenerator.IsModelValidSuperStrange(ModelState, Input)) { }
+        else if (Input == null) { }
+        else
+            await Upsert(Input);
+
+        return Page();
+    }
+
+    private async Task Upsert(OpenIddictEntityFrameworkCoreApplication input)
+    {
+        var existing = string.IsNullOrEmpty(input.ClientId) ? null : await _applicationManager.FindByClientIdAsync(input.ClientId);
+        if (existing is OpenIddictEntityFrameworkCoreApplication existingApp)
+        {
+            //FormGenerator.UpdateModel(input, existingApp);
+            var descriptor = OpenIddictApplicationDescriptorExtensions.Create(input);
+            await _applicationManager.PopulateAsync(existingApp, descriptor);
+            if (input.ClientSecret?.Any() == true)
+            {
+                await _applicationManager.UpdateAsync(existingApp, input.ClientSecret);
+                // TODO: we shouldn't keep plain secret - set the hashed secret
+                // existingApp.ClientSecret =  await _storeForSecrets.GetClientSecretAsync(existingApp, CancellationToken.None);
+            }
+            else
+                await _applicationManager.UpdateAsync(existingApp);
+
+            _dbContext.Update(existingApp);
+        }
+        else
+        {
+            input.Id = Guid.NewGuid().ToString().Replace("-", "");
+
+            var clientApp = OpenIddictApplicationDescriptorExtensions.Create(input);
+            await _applicationManager.CreateAsync(clientApp);
+            await _dbContext.AddAsync(input);
+        }
+
+        Clients = (await _dbContext.Set<OpenIddictEntityFrameworkCoreApplication>().ToListAsync()) ?? [];
+    }
+
+    [BindProperty]
+    public OpenIddictEntityFrameworkCoreApplication? Input { get; set; }
+
+    [BindProperty]
+    public required string? JsonInput { get; set; }
+
+    public List<OpenIddictEntityFrameworkCoreApplication> Clients { get; private set; } = [];
+
+    public List<RenderOverride> GetRenderOverrides() =>
+        [
+            new RenderOverride { PropertyName = nameof(OpenIddictEntityFrameworkCoreApplication.ClientSecret), ModifyInfo = pi => {
+                pi.Secret = true;
+                pi.Autocomplete = "off";
+            } },
+            new RenderOverride { PropertyName = nameof(OpenIddictEntityFrameworkCoreApplication.ClientId), ModifyInfo = pi => {
+                pi.Autocomplete = "off";
+            } }
+        ];
 }

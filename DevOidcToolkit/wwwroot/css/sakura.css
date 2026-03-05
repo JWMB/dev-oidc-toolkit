@@ -224,3 +224,7 @@ label, legend, fieldset {
   margin-bottom: 0.5rem;
   font-weight: 600;
 }
+
+input:invalid {
+    border: 2px dashed red;
+}

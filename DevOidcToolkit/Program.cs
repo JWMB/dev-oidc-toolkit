@@ -1,10 +1,16 @@
 using System.Net;
+using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
 
+using DevOidcToolkit;
 using DevOidcToolkit.Infrastructure.Configuration;
 using DevOidcToolkit.Infrastructure.Database;
+using DevOidcToolkit.Pages;
 
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
@@ -17,8 +23,11 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Configuration.Sources.Clear();
 
-builder.Configuration.AddJsonFile("config.json", optional: true, reloadOnChange: true);
-builder.Configuration.AddEnvironmentVariables();
+builder.Configuration
+    .AddJsonFile("config.json", optional: false, reloadOnChange: true)
+    .AddJsonFile($"config.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
+    .AddUserSecrets<Program>()
+    .AddEnvironmentVariables();
 
 var configSection = builder.Configuration.GetSection(DevOidcToolkitConfiguration.Position);
 var config = configSection.Get<DevOidcToolkitConfiguration>() ?? new DevOidcToolkitConfiguration();
@@ -61,7 +70,42 @@ builder.Services.AddIdentity<DevOidcToolkitUser, IdentityRole>(options =>
 
 builder.Services.ConfigureApplicationCookie(options =>
 {
+    // TODO: cookie doesn't appear in response when behind proxy
+    //options.Cookie.Name = "ThisIsMyNewName";
+    //options.Cookie.SameSite = SameSiteMode.None;
+    //options.Cookie.Domain = "test.bngaged.io:8088";
+    //if (options.CookieManager != null) { }
     options.LoginPath = "/login";
+
+    options.Events.OnSignedIn = context =>
+    {
+        Log(context.HttpContext, context.Principal, "OnSignedIn");
+        return Task.CompletedTask;
+    };
+    options.Events.OnSigningIn = context =>
+    {
+        Log(context.HttpContext, context.Principal, "OnSigningIn");
+        return Task.CompletedTask;
+    };
+    options.Events.OnValidatePrincipal = context =>
+    {
+        Log(context.HttpContext, context.Principal, "OnValidatePrincipal");
+        return Task.CompletedTask;
+    };
+    options.Events.OnRedirectToLogin = context =>
+    {
+        var redirectUri = context.RedirectUri;
+        var loginHint = context.Request.Query[Parameters.LoginHint].ToString();
+        if (loginHint.Any())
+            redirectUri = QueryHelpers.AddQueryString(redirectUri, Parameters.LoginHint, loginHint);
+
+        context.Response.Redirect(redirectUri);
+        return Task.CompletedTask;
+    };
+
+    static void Log(HttpContext ctx, ClaimsPrincipal? principal, string eventName)
+        => GetLogger(ctx)?.LogInformation($"Event={eventName} Authenticated={principal?.Identity?.IsAuthenticated} Type={principal?.Identity?.AuthenticationType} Name={principal?.Identity?.Name}");
+    static ILogger? GetLogger(HttpContext ctx) => ctx.RequestServices.GetRequiredService<ILoggerFactory>()?.CreateLogger("Cookies");
 });
 
 // Add session support with secure defaults
@@ -96,76 +140,65 @@ builder.Services.AddOpenIddict()
         options.RegisterScopes(Scopes.OpenId, Scopes.Email, Scopes.Profile);
         options.RegisterClaims(Claims.Email, Claims.GivenName, Claims.FamilyName, Claims.Role);
 
-        if (config.Issuer is not null)
-        {
-            options.SetIssuer(new Uri(config.Issuer));
-        }
+        var issuer = config.Issuer ?? config.PublicAuthority;
+        if (issuer is not null)
+            options.SetIssuer(new Uri(issuer));
 
         // Register the signing and encryption credentials.
         options.AddEphemeralEncryptionKey()
                .AddEphemeralSigningKey();
 
         // Register the ASP.NET Core host and configure the ASP.NET Core options.
-        options.UseAspNetCore()
+        var oidBuilder = options.UseAspNetCore()
                .EnableAuthorizationEndpointPassthrough()
                .EnableTokenEndpointPassthrough()
                .EnableUserInfoEndpointPassthrough()
                .EnableStatusCodePagesIntegration()
-               .EnableEndSessionEndpointPassthrough()
-               .DisableTransportSecurityRequirement();
+               .EnableEndSessionEndpointPassthrough();
+
+        if (builder.Environment.IsDevelopment()) //builder.Environment.EnvironmentName == "Development")
+            oidBuilder.DisableTransportSecurityRequirement();
     });
 
 builder.Services.AddControllersWithViews().AddRazorRuntimeCompilation();
 builder.Services.AddRazorPages().AddRazorRuntimeCompilation();
 
+Console.WriteLine($"Setting up Kestrel: {config.Address} {config.Port}");
+
 builder.WebHost.ConfigureKestrel(options =>
 {
+    bool fallbackToDefault = false; // builder.Environment.EnvironmentName != "Development";
     if (config.Address != null)
+        options.Listen(IPAddress.Parse(config.Address), config.Port, listenOptions => ConfigureHttps(config.Https, listenOptions, fallbackToDefault));
+    else
+        options.ListenLocalhost(config.Port, listenOptions => ConfigureHttps(config.Https, listenOptions, fallbackToDefault));
+    
+    static void ConfigureHttps(HttpsConfiguration? httpsConfig, ListenOptions listenOptions, bool fallbackToDefault)
     {
-        options.Listen(IPAddress.Parse(config.Address), config.Port, listenOptions =>
+        if (httpsConfig?.Inline != null)
         {
-            if (config.Https?.Inline != null)
-            {
-                var certPem = config.Https.Inline.Certificate;
-                var keyPem = config.Https.Inline.PrivateKey;
-                var x509 = X509Certificate2.CreateFromPem(certPem, keyPem);
-                listenOptions.UseHttps(x509);
-                return;
-            }
-
-            if (config.Https?.File != null)
-            {
-                var certPem = File.ReadAllText(config.Https.File.CertificatePath);
-                var keyPem = File.ReadAllText(config.Https.File.PrivateKeyPath);
-                var x509 = X509Certificate2.CreateFromPem(certPem, keyPem);
-                listenOptions.UseHttps(x509);
-                return;
-            }
-        });
-        return;
+            var certPem = httpsConfig.Inline.Certificate;
+            var keyPem = httpsConfig.Inline.PrivateKey;
+            var x509 = X509Certificate2.CreateFromPem(certPem, keyPem);
+            listenOptions.UseHttps(x509);
+            Console.WriteLine($"Using inline cert");
+        }
+        else if (httpsConfig?.File != null)
+        {
+            var certPem = File.ReadAllText(httpsConfig.File.CertificatePath);
+            var keyPem = File.ReadAllText(httpsConfig.File.PrivateKeyPath);
+            var x509 = X509Certificate2.CreateFromPem(certPem, keyPem);
+            listenOptions.UseHttps(x509);
+            Console.WriteLine($"Using file cert");
+        }
+        else if (fallbackToDefault)
+        {
+            listenOptions.UseHttps();
+            Console.WriteLine($"Using default cert");
+        }
     }
-
-    options.ListenLocalhost(config.Port, listenOptions =>
-    {
-        if (config.Https?.Inline != null)
-        {
-            var certPem = config.Https.Inline.Certificate;
-            var keyPem = config.Https.Inline.PrivateKey;
-            var x509 = X509Certificate2.CreateFromPem(certPem, keyPem);
-            listenOptions.UseHttps(x509);
-            return;
-        }
-
-        if (config.Https?.File != null)
-        {
-            var certPem = File.ReadAllText(config.Https.File.CertificatePath);
-            var keyPem = File.ReadAllText(config.Https.File.PrivateKeyPath);
-            var x509 = X509Certificate2.CreateFromPem(certPem, keyPem);
-            listenOptions.UseHttps(x509);
-            return;
-        }
-    });
 });
+
 
 builder.Services.AddCors(options =>
 {
@@ -174,6 +207,7 @@ builder.Services.AddCors(options =>
         var origins = config.Clients
             .SelectMany(client => client.RedirectUris.Concat(client.PostLogoutRedirectUris))
             .Select(uri => new Uri(uri).GetLeftPart(UriPartial.Authority))
+            .Concat(string.IsNullOrEmpty(config.PublicAuthority) ? [] : [config.PublicAuthority])
             .Distinct()
             .ToArray();
 
@@ -184,6 +218,13 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto);
+
+if (!builder.Environment.IsDevelopment() && !string.IsNullOrEmpty(config.DataProtectionDirectory))
+    builder.Services.AddDataProtection() // Still getting "The antiforgery token could not be decrypted"...
+        .PersistKeysToFileSystem(new DirectoryInfo(config.DataProtectionDirectory));
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -193,7 +234,14 @@ using (var scope = app.Services.CreateScope())
 
     if (config.Database.SqliteFile is not null)
     {
-        db.Database.EnsureCreated();
+        try
+        {
+            db.Database.EnsureCreated();
+        }
+        catch (SqliteException ex) when (ex.Message.Contains("SQLite Error 14")) // unable to open database file
+        {
+            throw new Exception($"{nameof(config.Database.SqliteFile)}={config.Database.SqliteFile} ({new FileInfo(config.Database.SqliteFile).FullName})", ex);
+        }
     }
 
     // Set up users and clients in the DB
@@ -212,17 +260,18 @@ using (var scope = app.Services.CreateScope())
         {
             Id = i.ToString(),
             Email = user.Email,
-            UserName = user.Email,
+            UserName = user.Username ?? user.Email,
             FirstName = user.FirstName,
             LastName = user.LastName,
             EmailConfirmed = true,
         };
-        var result = await userManager.CreateAsync(userEntity);
+        if (user.Password?.Any() == true)
+            userEntity.PasswordHash = userManager.PasswordHasher.HashPassword(userEntity, user.Password);
 
-        if (!result.Succeeded)
-        {
-            throw new Exception($"Failed to set up user: ${string.Join(", ", result.Errors.Select(error => error.Description))}");
-        }
+        await UsersPageModel.Upsert(userEntity, userManager);
+        //var result = await userManager.CreateAsync(userEntity);
+        //if (!result.Succeeded)
+        //    throw new Exception($"Failed to set up user: ${string.Join(", ", result.Errors.Select(error => error.Description))}");
 
         foreach (var role in user.Roles)
         {
@@ -239,35 +288,22 @@ using (var scope = app.Services.CreateScope())
     foreach (var client in config.Clients)
     {
         if (await openIddictManager.FindByClientIdAsync(client.Id) is not null)
-        {
             continue;
-        }
 
-        var clientApp = new OpenIddictApplicationDescriptor()
-        {
-            ClientId = client.Id,
-            ClientSecret = client.Secret,
-            Permissions = {
-                Permissions.Endpoints.Authorization,
-                Permissions.Endpoints.Token,
-                Permissions.Endpoints.EndSession,
-
-                Permissions.GrantTypes.AuthorizationCode,
-                Permissions.ResponseTypes.Code,
-
-                Permissions.Scopes.Profile,
-                Permissions.Scopes.Email
-            },
-            ConsentType = ConsentTypes.Explicit
-        };
-        client.RedirectUris.ForEach(redirectUri => clientApp.RedirectUris.Add(new Uri(redirectUri)));
-        client.PostLogoutRedirectUris.ForEach(redirectUri => clientApp.PostLogoutRedirectUris.Add(new Uri(redirectUri)));
-        await openIddictManager.CreateAsync(clientApp);
+        await openIddictManager.CreateAsync(OpenIddictApplicationDescriptorExtensions.Create(client));
     }
 }
 
 app.UseDeveloperExceptionPage();
-app.UseForwardedHeaders();
+app.UseForwardedHeaders(); // similar to? https://learn.microsoft.com/en-us/answers/questions/1329133/issues-with-openidconnect-and-ms-identity-web-behi
+
+if (!app.Environment.IsDevelopment())
+{
+    Console.WriteLine("Configure HSTS and HTTPS redirection");
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
+
 app.UseRouting();
 
 app.UseSession();
@@ -280,22 +316,27 @@ app.UseAuthorization();
 
 if (!app.Environment.IsDevelopment())
 {
-
-    var documentationFileProvider = new ManifestEmbeddedFileProvider(typeof(Program).Assembly, "/Documentation");
-    app.Map("/documentation", documentationApp =>
+    try
     {
-        documentationApp.UseDefaultFiles(new DefaultFilesOptions
+        var documentationFileProvider = new ManifestEmbeddedFileProvider(typeof(Program).Assembly, "/Documentation");
+        app.Map("/documentation", documentationApp =>
         {
-            FileProvider = documentationFileProvider,
-            DefaultFileNames = ["index.html"],
-        });
+            documentationApp.UseDefaultFiles(new DefaultFilesOptions
+            {
+                FileProvider = documentationFileProvider,
+                DefaultFileNames = ["index.html"],
+            });
 
-        documentationApp.UseStaticFiles(new StaticFileOptions
-        {
-            FileProvider = documentationFileProvider,
+            documentationApp.UseStaticFiles(new StaticFileOptions
+            {
+                FileProvider = documentationFileProvider,
+            });
         });
-    });
-
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Documentation error: {ex.Message}");
+    }
 }
 
 app.MapControllers();

@@ -32,12 +32,16 @@ public class ConnectController(ILogger<ConnectController> logger,
         if (User.Identity == null || !User.Identity.IsAuthenticated)
         {
             _logger.LogInformation("User is not authenticated. Redirecting to login.");
+            var authProperties = new AuthenticationProperties
+            {
+                RedirectUri = Request.Path + Request.QueryString
+            };
+            if (Request.Query.TryGetValue("login_hint", out var loginHints) && loginHints.Any())
+                authProperties.SetParameter(Parameters.LoginHint, $"{loginHints}");
+
             return Challenge(
                 authenticationSchemes: IdentityConstants.ApplicationScheme,
-                properties: new AuthenticationProperties
-                {
-                    RedirectUri = Request.Path + Request.QueryString
-                });
+                properties: authProperties);
         }
 
         _logger.LogDebug("User {UserName} is authenticated. Processing authorization request.", User.Identity.Name);
