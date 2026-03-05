@@ -49,6 +49,8 @@ else
 	<label for="password">Password</label>
 		<input asp-for="Credentials.Password" id="password" type="password" />
 		
+	<input asp-for="Credentials.ReturnUrl" type="hidden" />
+
 	<button type="submit" asp-page-handler="Password">Log In</button>
 </form>
 }

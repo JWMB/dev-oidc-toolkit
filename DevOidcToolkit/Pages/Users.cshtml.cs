@@ -130,27 +130,31 @@ public class UsersPageModel : PageModel
         return true;
     }
 
-    private async Task Upsert(DevOidcToolkitUser input)
+    // TODO: move to service
+    public static void NormalizeUser(DevOidcToolkitUser input, bool autosetUsername = false, bool autosetId = false)
     {
         input.Email = input.Email?.Trim();
         input.NormalizedEmail = input.Email?.ToUpperInvariant();
 
         input.UserName = input.UserName?.Trim();
+        if (autosetUsername && input.UserName?.Any() != false)
+            input.UserName = input.Email?.Replace("@", "").Replace(".", "").Replace("-", "");
         input.NormalizedUserName = input.UserName?.ToUpperInvariant();
 
-        input.Id = input.Id.Trim();
+        input.Id = autosetId ? Guid.NewGuid().ToString().Replace("-", "") : input.Id.Trim();
+    }
 
-        var existing = input.Id.Any() && input.Id != "0"
-            ? await userManager.FindByIdAsync(input.Id)
-            : (input.Email?.Any() == true 
-                ? await userManager.FindByEmailAsync(input.Email)
-                : null);
+    public static async Task Upsert(DevOidcToolkitUser input, UserManager<DevOidcToolkitUser> userManager)
+    {
+        NormalizeUser(input);
 
-        foreach (var item in GetPropertyWrappers(input).OfType<PropertyProxy>())
-            item.SetValue(input, item.GetValue(input));
+        var existing = (input.Id.Any() && input.Id != "0" ? await userManager.FindByIdAsync(input.Id) : null)
+            ?? (input.Email?.Any() == true ? await userManager.FindByEmailAsync(input.Email) : null)
+            ?? await userManager.FindByNameAsync(input.UserName ?? "");
 
         if (existing != null)
         {
+            input.Id = existing.Id;
             FormGenerator.UpdateModel(input, existing);
             var result = await userManager.UpdateAsync(existing);
             if (!result.Succeeded)
@@ -164,8 +168,15 @@ public class UsersPageModel : PageModel
                 throw new Exception($"{RenderErrors(result)}"); // TODO: update modelState (e.g. username already exists)
         }
 
-        Users = await userManager.Users.ToListAsync();
-
         static string RenderErrors(IdentityResult r) => $"{string.Join(", ", r.Errors.Select(o => $"{o.Code}: {o.Description}"))}";
+    }
+
+    private async Task Upsert(DevOidcToolkitUser input)
+    {
+        foreach (var item in GetPropertyWrappers(input).OfType<PropertyProxy>())
+            item.SetValue(input, item.GetValue(input));
+
+        await Upsert(input, userManager);
+        Users = await userManager.Users.ToListAsync();
     }
 }
